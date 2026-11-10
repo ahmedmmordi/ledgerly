@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/identity_db
+    username: postgres
+    password: postgres
+  jpa:
+    show-sql: false

@@ -29,6 +29,7 @@
     </scm>
     <modules>
         <module>common-lib</module>
+        <module>identity-service</module>
     </modules>
 
     <properties>
