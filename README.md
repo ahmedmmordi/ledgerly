@@ -26,10 +26,12 @@ Ledgerly is a mini core banking backend built as a microservices architecture. I
 - Multi-module Maven structure with parent POM and formatter plugin.
 - common-lib: BaseEntity (UUID v7, JPA auditing, @Version) and GlobalExceptionHandler (ProblemDetail).
 - identity-service: module skeleton, virtual threads, UTC timezone, and Hikari pool.
+- identity-service: User entity, Role enum, UserRepository, and Flyway migration V001__create_users.sql (case-insensitive unique email index and format check constraint).
+- identity-service: Register and login endpoints with Jakarta Validation, BCrypt password hashing, and ProblemDetail error handling.
 - Infrastructure: Docker Compose with PostgreSQL 18 Alpine (identity_db on port 5433).
 
 ### Backlog
-- identity-service: User entity, Flyway migrations, registration, login, and JWT security.
+- identity-service: JWT token generation (JwtService), Spring Security configuration, and GET /api/v1/users/me endpoint.
 - identity-service: Dev seeder and Testcontainers tests.
 - ledger-service: Accounts, double-entry ledger, transfers, and pessimistic locking.
 - ledger-service: Transactional outbox and Kafka event publishing.
