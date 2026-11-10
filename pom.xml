@@ -28,7 +28,7 @@
         <url/>
     </scm>
     <modules>
-
+        <module>common-lib</module>
     </modules>
 
     <properties>
