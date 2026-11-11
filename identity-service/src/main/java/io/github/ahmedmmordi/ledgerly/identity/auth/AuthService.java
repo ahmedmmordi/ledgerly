@@ -21,6 +21,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final WelcomeNotificationService welcomeNotificationService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -36,6 +37,10 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
         log.info("Registered new user with id: {}", savedUser.getId());
+
+        welcomeNotificationService.sendWelcome(savedUser.getEmail(),
+                savedUser.getFirstName() + " " + savedUser.getLastName());
+
         String token = jwtService.generateToken(savedUser.getId(), savedUser.getEmail(), savedUser.getRole());
         return AuthResponse.from(savedUser, token);
     }
