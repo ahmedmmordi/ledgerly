@@ -34,6 +34,7 @@ Ledgerly is a mini core banking backend built as a microservices architecture. I
 - identity-service: Asynchronous welcome notification dispatching (@Async) using Java 25 virtual threads on user registration.
 - identity-service: Testcontainers 2.x configured with PostgreSQL 18 container.
 - Infrastructure: Docker Compose with PostgreSQL 18 Alpine (identity_db on port 5433).
+- CI: GitHub Actions workflow with format check, compilation, and verify.
 
 ### Backlog
 - identity-service: Testcontainers tests.
@@ -41,7 +42,7 @@ Ledgerly is a mini core banking backend built as a microservices architecture. I
 - ledger-service: Transactional outbox and Kafka event publishing.
 - statement-service: Kafka consumer and MongoDB statements.
 - api-gateway: Spring Cloud Gateway with JWT check and Redis rate limit.
-- Observability and CI: Prometheus, Grafana, and GitHub Actions pipeline.
+- Observability: Prometheus and Grafana dashboards.
 
 ## Dev Seed Credentials
 
