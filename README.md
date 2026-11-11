@@ -29,6 +29,7 @@ Ledgerly is a mini core banking backend built as a microservices architecture. I
 - identity-service: User entity, Role enum, UserRepository, and Flyway migration V001__create_users.sql (case-insensitive unique email index and format check constraint).
 - identity-service: Register and login endpoints with Jakarta Validation, BCrypt password hashing, and ProblemDetail error handling.
 - identity-service: JWT token generation (JwtService), Spring Security configuration, and GET /api/v1/users/me endpoint.
+- identity-service: OpenAPI 3.1 documentation and interactive Swagger UI with JWT Bearer authentication support.
 - Infrastructure: Docker Compose with PostgreSQL 18 Alpine (identity_db on port 5433).
 
 ### Backlog
