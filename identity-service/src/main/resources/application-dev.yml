@@ -5,3 +5,8 @@ spring:
     password: postgres
   jpa:
     show-sql: false
+
+app:
+  security:
+    jwt:
+      secret: "ZGV2LW9ubHktc2VjcmV0LWtleS0zMi1ieXRlcy1taW4h"

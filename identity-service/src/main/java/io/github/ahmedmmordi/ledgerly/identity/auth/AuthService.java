@@ -3,6 +3,7 @@ package io.github.ahmedmmordi.ledgerly.identity.auth;
 import io.github.ahmedmmordi.ledgerly.identity.auth.dto.AuthResponse;
 import io.github.ahmedmmordi.ledgerly.identity.auth.dto.LoginRequest;
 import io.github.ahmedmmordi.ledgerly.identity.auth.dto.RegisterRequest;
+import io.github.ahmedmmordi.ledgerly.identity.config.JwtService;
 import io.github.ahmedmmordi.ledgerly.identity.user.Role;
 import io.github.ahmedmmordi.ledgerly.identity.user.User;
 import io.github.ahmedmmordi.ledgerly.identity.user.UserRepository;
@@ -19,6 +20,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -34,7 +36,8 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
         log.info("Registered new user with id: {}", savedUser.getId());
-        return AuthResponse.from(savedUser);
+        String token = jwtService.generateToken(savedUser.getId(), savedUser.getEmail(), savedUser.getRole());
+        return AuthResponse.from(savedUser, token);
     }
 
     @Transactional(readOnly = true)
@@ -51,6 +54,7 @@ public class AuthService {
         }
 
         log.info("User logged in successfully: {}", user.getId());
-        return AuthResponse.from(user);
+        String token = jwtService.generateToken(user.getId(), user.getEmail(), user.getRole());
+        return AuthResponse.from(user, token);
     }
 }

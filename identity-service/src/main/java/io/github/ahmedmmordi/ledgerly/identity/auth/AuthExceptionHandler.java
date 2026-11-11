@@ -27,4 +27,12 @@ public class AuthExceptionHandler {
         problem.setType(URI.create("urn:problem-type:invalid-credentials"));
         return problem;
     }
+
+    @ExceptionHandler(InvalidTokenException.class)
+    public ProblemDetail handleInvalidToken(InvalidTokenException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Invalid Token");
+        problem.setType(URI.create("urn:problem-type:invalid-token"));
+        return problem;
+    }
 }
