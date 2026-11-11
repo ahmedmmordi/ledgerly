@@ -30,15 +30,28 @@ Ledgerly is a mini core banking backend built as a microservices architecture. I
 - identity-service: Register and login endpoints with Jakarta Validation, BCrypt password hashing, and ProblemDetail error handling.
 - identity-service: JWT token generation (JwtService), Spring Security configuration, and GET /api/v1/users/me endpoint.
 - identity-service: OpenAPI 3.1 documentation and interactive Swagger UI with JWT Bearer authentication support.
+- identity-service: Dev data seeder (UserDataSeeder) using Spring Data JPA for 2 Admins and 3 Customers.
 - Infrastructure: Docker Compose with PostgreSQL 18 Alpine (identity_db on port 5433).
 
 ### Backlog
-- identity-service: Dev seeder and Testcontainers tests.
+- identity-service: Testcontainers tests.
 - ledger-service: Accounts, double-entry ledger, transfers, and pessimistic locking.
 - ledger-service: Transactional outbox and Kafka event publishing.
 - statement-service: Kafka consumer and MongoDB statements.
 - api-gateway: Spring Cloud Gateway with JWT check and Redis rate limit.
 - Observability and CI: Prometheus, Grafana, and GitHub Actions pipeline.
+
+## Dev Seed Credentials
+
+When running with `-Dspring-boot.run.profiles=dev`, the following test users are automatically seeded with password `Password123!`:
+
+| Role | Email | Name | Password |
+|---|---|---|---|
+| `ADMIN` | `admin1@ledgerly.com` | Admin One | `Password123!` |
+| `ADMIN` | `admin2@ledgerly.com` | Admin Two | `Password123!` |
+| `USER` | `ahmed@ledgerly.com` | Ahmed Mordi | `Password123!` |
+| `USER` | `bob@ledgerly.com` | Bob Jones | `Password123!` |
+| `USER` | `charlie@ledgerly.com` | Charlie Brown | `Password123!` |
 
 ## Local Development
 
