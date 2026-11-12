@@ -33,7 +33,7 @@ Ledgerly is a mini core banking backend built as a microservices architecture. I
 - identity-service: Dev data seeder (UserDataSeeder) using Spring Data JPA for 2 Admins and 3 Customers.
 - identity-service: Asynchronous welcome notification dispatching (@Async) using Java 25 virtual threads on user registration.
 - identity-service: Testcontainers 2.x configured with PostgreSQL 18 container.
-- identity-service: AuthService unit tests with JUnit 5 and Mockito.
+- identity-service: AuthService and JwtService unit tests with JUnit 5 and Mockito.
 - Infrastructure: Docker Compose with PostgreSQL 18 Alpine (identity_db on port 5433).
 - CI: GitHub Actions workflow with format check, compilation, and verify.
 
