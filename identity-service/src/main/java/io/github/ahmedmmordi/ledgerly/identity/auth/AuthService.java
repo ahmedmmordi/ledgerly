@@ -27,7 +27,7 @@ public class AuthService {
     public AuthResponse register(RegisterRequest request) {
         String normalizedEmail = User.normalizeEmail(request.email());
         if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
-            log.warn("Registration rejected: email '{}' already registered", normalizedEmail);
+            log.warn("Registration rejected: duplicate email address");
             throw new UserAlreadyExistsException(normalizedEmail);
         }
 
@@ -49,7 +49,7 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         String normalizedEmail = User.normalizeEmail(request.email());
         User user = userRepository.findByEmailIgnoreCase(normalizedEmail).orElseThrow(() -> {
-            log.warn("Login failed: user with email '{}' not found", normalizedEmail);
+            log.warn("Login failed: user not found");
             return new InvalidCredentialsException();
         });
 
