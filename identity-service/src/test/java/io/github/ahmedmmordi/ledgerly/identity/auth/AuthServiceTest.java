@@ -25,6 +25,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -43,7 +44,7 @@ class AuthServiceTest {
     private JwtService jwtService;
 
     @Mock
-    private WelcomeNotificationService welcomeNotificationService;
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private AuthService authService;
@@ -83,11 +84,15 @@ class AuthServiceTest {
             assertThat(savedUser.getPasswordHash()).isEqualTo(encodedHash).isNotEqualTo(rawPassword);
             assertThat(savedUser.getRole()).isEqualTo(Role.USER);
 
-            verify(welcomeNotificationService).sendWelcome("ahmed.mordi@example.com", "Ahmed Mordi");
+            ArgumentCaptor<UserRegisteredEvent> eventCaptor = ArgumentCaptor.forClass(UserRegisteredEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            UserRegisteredEvent publishedEvent = eventCaptor.getValue();
+            assertThat(publishedEvent.userId()).isEqualTo(userId);
+            assertThat(publishedEvent.email()).isEqualTo("ahmed.mordi@example.com");
         }
 
         @Test
-        @DisplayName("normalizes email and trims names before saving and dispatching welcome")
+        @DisplayName("normalizes email and trims names before saving")
         void withWhitespaceAndUppercaseEmail_normalizesEmailAndNamesBeforeSaving() {
             UUID userId = UUID.randomUUID();
             RegisterRequest request = new RegisterRequest("  Ahmed.Mordi@EXAMPLE.COM  ", "Password123!", "  Ahmed  ",
@@ -111,7 +116,7 @@ class AuthServiceTest {
             assertThat(savedUser.getFirstName()).isEqualTo("Ahmed");
             assertThat(savedUser.getLastName()).isEqualTo("Mordi");
 
-            verify(welcomeNotificationService).sendWelcome("ahmed.mordi@example.com", "Ahmed Mordi");
+            verify(eventPublisher).publishEvent(new UserRegisteredEvent(userId, "ahmed.mordi@example.com"));
         }
 
         @Test
@@ -126,7 +131,7 @@ class AuthServiceTest {
 
             verify(passwordEncoder, never()).encode(any());
             verify(userRepository, never()).save(any());
-            verifyNoInteractions(welcomeNotificationService);
+            verifyNoInteractions(eventPublisher);
             verifyNoInteractions(jwtService);
         }
 
@@ -143,7 +148,7 @@ class AuthServiceTest {
             assertThatThrownBy(() -> authService.register(request)).isInstanceOf(DataIntegrityViolationException.class)
                     .hasMessageContaining("duplicate key value");
 
-            verifyNoInteractions(welcomeNotificationService);
+            verifyNoInteractions(eventPublisher);
             verifyNoInteractions(jwtService);
         }
     }

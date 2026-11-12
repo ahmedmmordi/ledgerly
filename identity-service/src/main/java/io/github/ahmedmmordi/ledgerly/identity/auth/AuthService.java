@@ -9,6 +9,7 @@ import io.github.ahmedmmordi.ledgerly.identity.user.User;
 import io.github.ahmedmmordi.ledgerly.identity.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,7 +22,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final WelcomeNotificationService welcomeNotificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -38,8 +39,7 @@ public class AuthService {
         User savedUser = userRepository.save(user);
         log.info("Registered new user with id: {}", savedUser.getId());
 
-        welcomeNotificationService.sendWelcome(savedUser.getEmail(),
-                savedUser.getFirstName() + " " + savedUser.getLastName());
+        eventPublisher.publishEvent(new UserRegisteredEvent(savedUser.getId(), savedUser.getEmail()));
 
         String token = jwtService.generateToken(savedUser.getId(), savedUser.getEmail(), savedUser.getRole());
         return AuthResponse.from(savedUser, token);
