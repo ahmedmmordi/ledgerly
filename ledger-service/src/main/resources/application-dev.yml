@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5436/ledger_db
+    username: postgres
+    password: postgres
+  jpa:
+    show-sql: false

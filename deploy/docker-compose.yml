@@ -15,5 +15,22 @@ services:
       timeout: 5s
       retries: 5
 
+  ledger-db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ledger_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5436:5432"
+    volumes:
+      - ledger_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ledger_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   identity_db_data:
+  ledger_db_data:
