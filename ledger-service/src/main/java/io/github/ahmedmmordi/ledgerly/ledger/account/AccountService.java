@@ -3,6 +3,7 @@ package io.github.ahmedmmordi.ledgerly.ledger.account;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.AccountNotFoundException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.Money;
 import java.security.SecureRandom;
+import java.util.Currency;
 import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -26,10 +27,10 @@ public class AccountService {
     @Transactional
     public Account createCustomerAccount(UUID userId, String currencyCode) {
         Objects.requireNonNull(userId, "User ID must not be null");
-        Objects.requireNonNull(currencyCode, "Currency code must not be null");
+        String normalizedCurrency = validateAndNormalizeCurrency(currencyCode);
 
         String accountNumber = generateUniqueAccountNumber();
-        Account account = Account.createCustomer(userId, accountNumber, currencyCode);
+        Account account = Account.createCustomer(userId, accountNumber, normalizedCurrency);
         Account saved = accountRepository.save(account);
         log.info("Created customer account with ID {} for user {}", saved.getId(), userId);
         return saved;
@@ -38,9 +39,8 @@ public class AccountService {
     @Transactional
     public Account createSystemAccount(UUID userId, String currencyCode) {
         Objects.requireNonNull(userId, "User ID must not be null");
-        Objects.requireNonNull(currencyCode, "Currency code must not be null");
+        String normalizedCurrency = validateAndNormalizeCurrency(currencyCode);
 
-        String normalizedCurrency = currencyCode.trim().toUpperCase();
         String accountNumber = "SYS" + normalizedCurrency + "00000001";
         if (accountRepository.existsByAccountNumber(accountNumber)) {
             throw new IllegalStateException("System account already exists for currency " + normalizedCurrency);
@@ -54,11 +54,10 @@ public class AccountService {
 
     @Transactional
     public Account getOrCreateSystemAccount(UUID userId, String currencyCode) {
-        Objects.requireNonNull(currencyCode, "Currency code must not be null");
-        String normalizedCurrency = currencyCode.trim().toUpperCase();
+        Objects.requireNonNull(userId, "User ID must not be null");
+        String normalizedCurrency = validateAndNormalizeCurrency(currencyCode);
 
         return accountRepository.findSystemAccount(normalizedCurrency).orElseGet(() -> {
-            Objects.requireNonNull(userId, "User ID must not be null when creating system account");
             String accountNumber = "SYS" + normalizedCurrency + "00000001";
             Account account = Account.createSystem(userId, accountNumber, normalizedCurrency);
             Account saved = accountRepository.save(account);
@@ -74,8 +73,12 @@ public class AccountService {
 
     public Account getAccountByNumber(String accountNumber) {
         Objects.requireNonNull(accountNumber, "Account number must not be null");
-        return accountRepository.findByAccountNumber(accountNumber.trim().toUpperCase())
-                .orElseThrow(() -> new AccountNotFoundException(accountNumber.trim().toUpperCase()));
+        String normalizedAccountNumber = accountNumber.trim().toUpperCase();
+        if (normalizedAccountNumber.isEmpty()) {
+            throw new IllegalArgumentException("Account number must not be blank");
+        }
+        return accountRepository.findByAccountNumber(normalizedAccountNumber)
+                .orElseThrow(() -> new AccountNotFoundException(normalizedAccountNumber));
     }
 
     public Page<Account> getAccountsByUserId(UUID userId, Pageable pageable) {
@@ -129,7 +132,18 @@ public class AccountService {
                 return candidate;
             }
         }
+        log.error("Failed to generate unique account number after {} attempts", MAX_GENERATION_ATTEMPTS);
         throw new IllegalStateException(
                 "Failed to generate unique account number after " + MAX_GENERATION_ATTEMPTS + " attempts");
+    }
+
+    private String validateAndNormalizeCurrency(String currencyCode) {
+        Objects.requireNonNull(currencyCode, "Currency code must not be null");
+        String normalized = currencyCode.trim().toUpperCase();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("Currency code must not be blank");
+        }
+        Currency.getInstance(normalized);
+        return normalized;
     }
 }
