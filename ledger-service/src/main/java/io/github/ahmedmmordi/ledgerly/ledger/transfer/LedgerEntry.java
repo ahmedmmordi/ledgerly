@@ -1,5 +1,6 @@
 package io.github.ahmedmmordi.ledgerly.ledger.transfer;
 
+import io.github.ahmedmmordi.ledgerly.ledger.domain.CurrencyMismatchException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.Money;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -69,6 +70,9 @@ public class LedgerEntry {
         Objects.requireNonNull(type, "Entry type must not be null");
         Objects.requireNonNull(amount, "Amount must not be null");
         Objects.requireNonNull(balanceAfter, "Balance after must not be null");
+        if (!amount.currency().equals(balanceAfter.currency())) {
+            throw new CurrencyMismatchException(amount.currency(), balanceAfter.currency());
+        }
         if (!amount.isPositive()) {
             throw new IllegalArgumentException("Ledger entry amount must be strictly positive");
         }

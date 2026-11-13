@@ -60,11 +60,16 @@ public class Account extends BaseEntity {
         Objects.requireNonNull(accountNumber, "Account number must not be null");
         Objects.requireNonNull(currencyCode, "Currency must not be null");
 
+        String normalizedAccountNumber = accountNumber.trim().toUpperCase();
+        if (normalizedAccountNumber.isEmpty()) {
+            throw new IllegalArgumentException("Account number must not be blank");
+        }
+
         String normalizedCurrency = currencyCode.trim().toUpperCase();
         Currency.getInstance(normalizedCurrency); // Validates ISO 4217
 
-        return Account.builder().userId(userId).accountNumber(accountNumber.trim().toUpperCase())
-                .currency(normalizedCurrency).balance(0L).type(type).status(AccountStatus.ACTIVE).build();
+        return Account.builder().userId(userId).accountNumber(normalizedAccountNumber).currency(normalizedCurrency)
+                .balance(0L).type(type).status(AccountStatus.ACTIVE).build();
     }
 
     public Money getBalance() {
@@ -97,6 +102,7 @@ public class Account extends BaseEntity {
     }
 
     public boolean hasSufficientBalance(Money amount) {
+        assertMatchingCurrency(amount);
         if (this.type == AccountType.SYSTEM) {
             return true;
         }
@@ -104,10 +110,16 @@ public class Account extends BaseEntity {
     }
 
     public void freeze() {
+        if (this.status == AccountStatus.CLOSED) {
+            throw new IllegalStateException("Cannot freeze a closed account");
+        }
         this.status = AccountStatus.FROZEN;
     }
 
     public void activate() {
+        if (this.status == AccountStatus.CLOSED) {
+            throw new IllegalStateException("Cannot activate a closed account");
+        }
         this.status = AccountStatus.ACTIVE;
     }
 

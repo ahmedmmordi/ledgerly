@@ -91,6 +91,10 @@ public class Transfer extends BaseEntity {
             throw new IllegalStateException("Only PENDING transfers can be marked FAILED, current: " + this.status);
         }
         this.status = TransferStatus.FAILED;
-        this.failureReason = reason;
+        if (reason != null && reason.length() > 255) {
+            this.failureReason = reason.substring(0, 252) + "...";
+        } else {
+            this.failureReason = reason;
+        }
     }
 }
