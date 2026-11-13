@@ -70,13 +70,33 @@ public class Transfer extends BaseEntity {
             throw new IllegalArgumentException("Transfer amount must be strictly positive");
         }
 
+        String sanitizedDescription = null;
+        if (description != null) {
+            String trimmed = description.trim();
+            if (!trimmed.isEmpty()) {
+                sanitizedDescription = trimmed.length() > 255 ? trimmed.substring(0, 252) + "..." : trimmed;
+            }
+        }
+
         return Transfer.builder().fromAccountId(fromAccountId).toAccountId(toAccountId)
                 .amount(amount.amountInMinorUnits()).currency(amount.currency().getCurrencyCode()).status(status)
-                .description(description).initiatedByUserId(initiatedByUserId).build();
+                .description(sanitizedDescription).initiatedByUserId(initiatedByUserId).build();
     }
 
     public Money getAmount() {
         return Money.ofMinor(this.amount, this.currency);
+    }
+
+    public boolean isPending() {
+        return this.status == TransferStatus.PENDING;
+    }
+
+    public boolean isCompleted() {
+        return this.status == TransferStatus.COMPLETED;
+    }
+
+    public boolean isFailed() {
+        return this.status == TransferStatus.FAILED;
     }
 
     public void markCompleted() {
@@ -91,10 +111,11 @@ public class Transfer extends BaseEntity {
             throw new IllegalStateException("Only PENDING transfers can be marked FAILED, current: " + this.status);
         }
         this.status = TransferStatus.FAILED;
-        if (reason != null && reason.length() > 255) {
-            this.failureReason = reason.substring(0, 252) + "...";
+        if (reason != null) {
+            String trimmed = reason.trim();
+            this.failureReason = trimmed.length() > 255 ? trimmed.substring(0, 252) + "..." : trimmed;
         } else {
-            this.failureReason = reason;
+            this.failureReason = null;
         }
     }
 }
