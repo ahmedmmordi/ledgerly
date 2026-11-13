@@ -8,7 +8,7 @@ Ledgerly is a mini core banking backend built as a microservices architecture. I
 |---|---|---|---|---|
 | api-gateway | Routing, JWT validation, rate limiting | Redis | 8080 | Planned |
 | identity-service | Authentication, user registration, JWT issue | PostgreSQL | 8081 | Completed |
-| ledger-service | Accounts, double-entry ledger, transfers, outbox | PostgreSQL | 8082 | Planned |
+| ledger-service | Accounts, double-entry ledger, transfers, outbox | PostgreSQL | 8082 | In Progress |
 | statement-service | Event consumer, statements, CSV exports | MongoDB | 8083 | Planned |
 
 ## Tech Baseline
@@ -35,12 +35,17 @@ Ledgerly is a mini core banking backend built as a microservices architecture. I
 - identity-service: Testcontainers 2.x configured with PostgreSQL 18 container.
 - identity-service: AuthService and JwtService unit tests with JUnit 5 and Mockito.
 - identity-service: End-to-end integration tests (AuthIntegrationTest) with Testcontainers and PostgreSQL 18.
-- Infrastructure: Docker Compose with PostgreSQL 18 Alpine (identity_db on port 5433).
+- Infrastructure: Docker Compose with PostgreSQL 18 Alpine (identity_db on port 5433, ledger_db on port 5436).
 - CI: GitHub Actions workflow with format check, compilation, and verify.
+- ledger-service: Module bootstrap with virtual threads, UTC timezone, Hikari pool, and Testcontainers PostgreSQL 18 context bootstrap.
+- ledger-service: Money value object with discrete minor units math, ISO 4217 currency safety, and unit tests (MoneyTest).
+- ledger-service: Flyway schema migration (V001__create_ledger_tables.sql) for accounts, transfers, and ledger entries with engine-level balance checks and composite indices.
+- ledger-service: Domain entities (Account, Transfer, LedgerEntry) with rich DDD behaviors, enums, and domain exceptions.
+- ledger-service: Unit tests across domain models (MoneyTest, AccountTest, TransferTest, LedgerEntryTest).
 
 ### Backlog
-- ledger-service: Accounts, double-entry ledger, transfers, and pessimistic locking.
-- ledger-service: Transactional outbox and Kafka event publishing.
+- ledger-service: Core repositories, transfer validation rules, and double-entry transfer engine.
+- ledger-service: Pessimistic locking, transactional outbox, and Kafka event publishing.
 - statement-service: Kafka consumer and MongoDB statements.
 - api-gateway: Spring Cloud Gateway with JWT check and Redis rate limit.
 - Observability: Prometheus and Grafana dashboards.
@@ -81,11 +86,23 @@ docker compose -f deploy/docker-compose.yml up -d
 ./mvnw verify
 ```
 
-### 5. Run a service
-```bash
-cd identity-service
-../mvnw spring-boot:run -Dspring-boot.run.profiles=dev
-```
+### 5. Run services
+
+Each microservice runs independently with its own database and port:
+
+- **Identity Service** (Port 8081, DB Port 5433):
+  ```bash
+  cd identity-service
+  ../mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+  ```
+
+- **Ledger Service** (Port 8082, DB Port 5436):
+  ```bash
+  cd ledger-service
+  ../mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+  ```
+
+Both services can run concurrently in separate terminal sessions.
 
 ### 6. Stop database
 ```bash
