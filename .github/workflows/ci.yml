@@ -6,9 +6,12 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   formatting:
@@ -42,8 +45,12 @@ jobs:
           java-version: '25'
           cache: 'maven'
 
-      - name: Compile project
-        run: ./mvnw test-compile --no-transfer-progress
-
       - name: Run tests and verify
         run: ./mvnw verify --no-transfer-progress
+
+      - name: Upload Test Reports on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: '**/target/surefire-reports/'
