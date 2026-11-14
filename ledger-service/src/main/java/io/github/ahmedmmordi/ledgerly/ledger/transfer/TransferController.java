@@ -5,6 +5,8 @@ import io.github.ahmedmmordi.ledgerly.ledger.transfer.dto.DepositRequest;
 import io.github.ahmedmmordi.ledgerly.ledger.transfer.dto.LedgerEntryResponse;
 import io.github.ahmedmmordi.ledgerly.ledger.transfer.dto.TransferRequest;
 import io.github.ahmedmmordi.ledgerly.ledger.transfer.dto.TransferResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Transfers", description = "Endpoints for money transfers, cash deposits, and ledger history")
 @RestController
 @RequestMapping("/api/v1/transfers")
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ public class TransferController {
 
     private final TransferService transferService;
 
+    @Operation(summary = "Execute transfer", description = "Transfers money atomically between two accounts with balanced double-entry ledger entries")
     @PostMapping
     public ResponseEntity<TransferResponse> transfer(@Valid @RequestBody TransferRequest request) {
         Money amount = Money.ofMinor(request.amount(), request.currency());
@@ -39,6 +43,7 @@ public class TransferController {
         return ResponseEntity.created(location).body(response);
     }
 
+    @Operation(summary = "Deposit funds", description = "Deposits cash into an account from the system cash vault")
     @PostMapping("/deposit")
     public ResponseEntity<TransferResponse> deposit(@Valid @RequestBody DepositRequest request) {
         Money amount = Money.ofMinor(request.amount(), request.currency());
@@ -49,12 +54,14 @@ public class TransferController {
         return ResponseEntity.created(location).body(response);
     }
 
+    @Operation(summary = "Get transfer by ID", description = "Retrieves transfer status and transaction details by ID")
     @GetMapping("/{id}")
     public ResponseEntity<TransferResponse> getTransferById(@PathVariable UUID id) {
         Transfer transfer = transferService.getTransfer(id);
         return ResponseEntity.ok(TransferResponse.from(transfer));
     }
 
+    @Operation(summary = "Query transfers", description = "Retrieves paginated transfers filtered by account ID or initiated user ID")
     @GetMapping
     public ResponseEntity<Page<TransferResponse>> getTransfers(@RequestParam(required = false) UUID accountId,
             @RequestParam(required = false) UUID userId, @PageableDefault(size = 20) Pageable pageable) {
@@ -74,6 +81,7 @@ public class TransferController {
         throw new IllegalArgumentException("Either accountId or userId query parameter must be provided");
     }
 
+    @Operation(summary = "Get ledger entries", description = "Retrieves balanced double-entry ledger entries for a completed transfer")
     @GetMapping("/{id}/entries")
     public ResponseEntity<List<LedgerEntryResponse>> getLedgerEntriesByTransferId(@PathVariable UUID id) {
         Transfer transfer = transferService.getTransfer(id);
