@@ -385,7 +385,7 @@ class TransferControllerTest {
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.type").value("urn:problem-type:account-not-active"))
                     .andExpect(jsonPath("$.title").value("Account Not Active"))
-                    .andExpect(jsonPath("$.status").value("FROZEN"));
+                    .andExpect(jsonPath("$.status").value(409)).andExpect(jsonPath("$.accountStatus").value("FROZEN"));
         }
 
         @Test
@@ -622,7 +622,7 @@ class TransferControllerTest {
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.type").value("urn:problem-type:account-not-active"))
                     .andExpect(jsonPath("$.title").value("Account Not Active"))
-                    .andExpect(jsonPath("$.status").value("FROZEN"));
+                    .andExpect(jsonPath("$.status").value(409)).andExpect(jsonPath("$.accountStatus").value("FROZEN"));
         }
 
         @Test

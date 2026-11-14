@@ -84,7 +84,7 @@ public class LedgerExceptionHandler {
             problem.setProperty("accountId", ex.getAccountId().toString());
         }
         if (ex.getStatus() != null) {
-            problem.setProperty("status", ex.getStatus());
+            problem.setProperty("accountStatus", ex.getStatus());
         }
         return problem;
     }

@@ -112,7 +112,7 @@ class LedgerExceptionHandlerTest {
         assertThat(problem.getTitle()).isEqualTo("Account Not Active");
         assertThat(problem.getType()).isEqualTo(URI.create("urn:problem-type:account-not-active"));
         assertThat(problem.getProperties()).containsEntry("accountId", accountId.toString());
-        assertThat(problem.getProperties()).containsEntry("status", "FROZEN");
+        assertThat(problem.getProperties()).containsEntry("accountStatus", "FROZEN");
     }
 
     @Test
