@@ -5,3 +5,8 @@ spring:
     password: postgres
   jpa:
     show-sql: false
+
+ledger:
+  idempotency:
+    ttl: 24h
+
