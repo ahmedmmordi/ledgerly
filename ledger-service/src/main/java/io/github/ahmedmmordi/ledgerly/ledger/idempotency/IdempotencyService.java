@@ -38,7 +38,6 @@ public class IdempotencyService {
 
     public static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
     public static final String X_SERVED_FROM_CACHE_HEADER = "X-Served-From-Cache";
-    public static final Duration DEFAULT_TTL = Duration.ofHours(24);
 
     private final IdempotencyKeyRepository repository;
     private final ObjectMapper objectMapper;
@@ -47,13 +46,13 @@ public class IdempotencyService {
 
     @Autowired
     public IdempotencyService(IdempotencyKeyRepository repository, PlatformTransactionManager transactionManager,
-            @Nullable ObjectMapper objectMapper, @Value("${ledger.idempotency.ttl:24h}") @Nullable Duration ttl) {
+            @Nullable ObjectMapper objectMapper, @Value("${ledger.idempotency.ttl:24h}") Duration ttl) {
         this.repository = Objects.requireNonNull(repository, "Repository must not be null");
         Objects.requireNonNull(transactionManager, "Transaction manager must not be null");
         this.objectMapper = objectMapper != null ? objectMapper : createDefaultObjectMapper();
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        this.ttl = ttl != null ? ttl : DEFAULT_TTL;
+        this.ttl = Objects.requireNonNull(ttl, "TTL must not be null");
     }
 
     private static ObjectMapper createDefaultObjectMapper() {
