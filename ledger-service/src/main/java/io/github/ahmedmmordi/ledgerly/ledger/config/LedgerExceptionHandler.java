@@ -5,6 +5,8 @@ import io.github.ahmedmmordi.ledgerly.ledger.domain.AccountNotFoundException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.CurrencyMismatchException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.InsufficientFundsException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.TransferNotFoundException;
+import io.github.ahmedmmordi.ledgerly.ledger.idempotency.IdempotencyConflictException;
+import io.github.ahmedmmordi.ledgerly.ledger.idempotency.IdempotencyPayloadMismatchException;
 import java.net.URI;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -24,6 +26,9 @@ public class LedgerExceptionHandler {
     private static final URI ACCOUNT_NOT_ACTIVE_TYPE = URI.create("urn:problem-type:account-not-active");
     private static final URI INVALID_STATE_TYPE = URI.create("urn:problem-type:invalid-state");
     private static final URI BAD_REQUEST_TYPE = URI.create("urn:problem-type:bad-request");
+    private static final URI IDEMPOTENCY_CONFLICT_TYPE = URI.create("urn:problem-type:idempotency-conflict");
+    private static final URI IDEMPOTENCY_PAYLOAD_MISMATCH_TYPE = URI
+            .create("urn:problem-type:idempotency-payload-mismatch");
 
     @ExceptionHandler(AccountNotFoundException.class)
     public ProblemDetail handleAccountNotFound(AccountNotFoundException ex) {
@@ -102,6 +107,28 @@ public class LedgerExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setTitle("Invalid Argument");
         problem.setType(BAD_REQUEST_TYPE);
+        return problem;
+    }
+
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ProblemDetail handleIdempotencyConflict(IdempotencyConflictException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Idempotency Conflict");
+        problem.setType(IDEMPOTENCY_CONFLICT_TYPE);
+        if (ex.getIdempotencyKey() != null) {
+            problem.setProperty("idempotencyKey", ex.getIdempotencyKey());
+        }
+        return problem;
+    }
+
+    @ExceptionHandler(IdempotencyPayloadMismatchException.class)
+    public ProblemDetail handleIdempotencyPayloadMismatch(IdempotencyPayloadMismatchException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        problem.setTitle("Idempotency Payload Mismatch");
+        problem.setType(IDEMPOTENCY_PAYLOAD_MISMATCH_TYPE);
+        if (ex.getIdempotencyKey() != null) {
+            problem.setProperty("idempotencyKey", ex.getIdempotencyKey());
+        }
         return problem;
     }
 }
