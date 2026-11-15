@@ -103,26 +103,30 @@ public class IdempotencyService {
 
         String trimmedKey = key.trim();
 
-        ReservationResult result = requiresNewTransactionTemplate.execute(_ -> {
-            Optional<IdempotencyKey> existingOpt = repository.findByUserIdAndIdempotencyKey(userId, trimmedKey);
-            if (existingOpt.isPresent()) {
-                IdempotencyKey existing = existingOpt.get();
-                if (existing.isExpired(Instant.now()) || existing.isFailed()) {
-                    repository.delete(existing);
-                    repository.flush();
-                } else if (existing.isProcessing()) {
-                    throw new IdempotencyConflictException(trimmedKey);
-                } else if (existing.isCompleted()) {
-                    return validateCompletedKey(existing, trimmedKey, endpoint, requestHash);
+        ReservationResult result;
+        try {
+            result = requiresNewTransactionTemplate.execute(_ -> {
+                Optional<IdempotencyKey> existingOpt = repository.findByUserIdAndIdempotencyKey(userId, trimmedKey);
+                if (existingOpt.isPresent()) {
+                    IdempotencyKey existing = existingOpt.get();
+                    if (existing.isExpired(Instant.now()) || existing.isFailed()) {
+                        repository.delete(existing);
+                        repository.flush();
+                    } else if (existing.isProcessing()) {
+                        throw new IdempotencyConflictException(trimmedKey);
+                    } else if (existing.isCompleted()) {
+                        return validateCompletedKey(existing, trimmedKey, endpoint, requestHash);
+                    }
                 }
-            }
 
-            Instant expiresAt = Instant.now().plus(ttl);
-            IdempotencyKey newKey = IdempotencyKey.create(userId, trimmedKey, endpoint, requestHash, expiresAt);
-            try {
+                Instant expiresAt = Instant.now().plus(ttl);
+                IdempotencyKey newKey = IdempotencyKey.create(userId, trimmedKey, endpoint, requestHash, expiresAt);
                 IdempotencyKey saved = repository.saveAndFlush(newKey);
                 return ReservationResult.reserved(saved);
-            } catch (DataIntegrityViolationException ex) {
+            });
+        } catch (DataIntegrityViolationException ex) {
+            // Transaction was aborted and rolled back. In a fresh transaction, inspect the concurrent key.
+            result = requiresNewTransactionTemplate.execute(_ -> {
                 IdempotencyKey concurrent = repository.findByUserIdAndIdempotencyKey(userId, trimmedKey)
                         .orElseThrow(() -> ex);
                 if (concurrent.isProcessing()) {
@@ -132,8 +136,8 @@ public class IdempotencyService {
                     return validateCompletedKey(concurrent, trimmedKey, endpoint, requestHash);
                 }
                 throw new IdempotencyConflictException(trimmedKey);
-            }
-        });
+            });
+        }
 
         return Objects.requireNonNull(result, "Transaction failed to return reservation result");
     }
