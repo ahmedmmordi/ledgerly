@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -22,6 +23,13 @@ import io.github.ahmedmmordi.ledgerly.ledger.domain.CurrencyMismatchException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.InsufficientFundsException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.Money;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.TransferNotFoundException;
+import io.github.ahmedmmordi.ledgerly.ledger.idempotency.IdempotencyConflictException;
+import io.github.ahmedmmordi.ledgerly.ledger.idempotency.IdempotencyPayloadMismatchException;
+import io.github.ahmedmmordi.ledgerly.ledger.idempotency.IdempotencyService;
+import io.github.ahmedmmordi.ledgerly.ledger.transfer.dto.DepositRequest;
+import io.github.ahmedmmordi.ledgerly.ledger.transfer.dto.TransferRequest;
+import io.github.ahmedmmordi.ledgerly.ledger.transfer.dto.TransferResponse;
+import java.net.URI;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Currency;
@@ -44,7 +52,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -66,6 +76,9 @@ class TransferControllerTest {
 
     @Mock
     private TransferService transferService;
+
+    @Mock
+    private IdempotencyService idempotencyService;
 
     @InjectMocks
     private TransferController transferController;
@@ -891,6 +904,342 @@ class TransferControllerTest {
             mockMvc.perform(get("/api/v1/transfers/{id}/entries", TRANSFER_ID)).andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.type").value("urn:problem-type:transfer-not-found"))
                     .andExpect(jsonPath("$.title").value("Transfer Not Found"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Idempotency-Key Header Tests")
+    class IdempotencyHeaderTests {
+
+        private static final String IDEMP_KEY = "test-idemp-key-123";
+
+        private ResponseEntity<TransferResponse> createCachedTransferResponse() {
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .header(IdempotencyService.X_SERVED_FROM_CACHE_HEADER, "true")
+                    .location(URI.create("/api/v1/transfers/" + TRANSFER_ID))
+                    .body(TransferResponse.from(sampleTransfer));
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers: Should delegate to IdempotencyService and return 201 on first execution")
+        void shouldDelegateToIdempotencyServiceOnFirstExecutionForTransfer() throws Exception {
+            Money expectedMoney = Money.ofMinor(5000L, "USD");
+            when(transferService.transfer(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, expectedMoney, "Invoice #101", USER_ID))
+                    .thenReturn(sampleTransfer);
+
+            when(idempotencyService.execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.TRANSFER_ENDPOINT),
+                    any(TransferRequest.class), eq(TransferResponse.class), any())).thenAnswer(inv -> {
+                        java.util.function.Supplier<ResponseEntity<TransferResponse>> action = inv.getArgument(5);
+                        return action.get();
+                    });
+
+            String validJson = createTransferJson(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, 5000L, "USD", "Invoice #101",
+                    USER_ID);
+
+            mockMvc.perform(post("/api/v1/transfers").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, IDEMP_KEY)
+                    .contentType(MediaType.APPLICATION_JSON).content(validJson)).andExpect(status().isCreated())
+                    .andExpect(header().string("Location", "/api/v1/transfers/" + TRANSFER_ID))
+                    .andExpect(header().doesNotExist(IdempotencyService.X_SERVED_FROM_CACHE_HEADER))
+                    .andExpect(jsonPath("$.id").value(TRANSFER_ID.toString()))
+                    .andExpect(jsonPath("$.status").value("COMPLETED"));
+
+            verify(idempotencyService).execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.TRANSFER_ENDPOINT),
+                    any(TransferRequest.class), eq(TransferResponse.class), any());
+            verify(transferService).transfer(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, expectedMoney, "Invoice #101", USER_ID);
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers: Should fallback to fromAccountId when initiatedByUserId is null")
+        void shouldFallbackToFromAccountIdWhenInitiatedByUserIdIsNull() throws Exception {
+            Money expectedMoney = Money.ofMinor(5000L, "USD");
+            Transfer minimalTransfer = Transfer.createCompleted(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, expectedMoney, null,
+                    null);
+            ReflectionTestUtils.setField(minimalTransfer, "id", TRANSFER_ID);
+            ReflectionTestUtils.setField(minimalTransfer, "createdAt", TIMESTAMP);
+            ReflectionTestUtils.setField(minimalTransfer, "updatedAt", TIMESTAMP);
+
+            when(transferService.transfer(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, expectedMoney, null, null))
+                    .thenReturn(minimalTransfer);
+
+            when(idempotencyService.execute(eq(FROM_ACCOUNT_ID), eq(IDEMP_KEY),
+                    eq(TransferController.TRANSFER_ENDPOINT), any(TransferRequest.class), eq(TransferResponse.class),
+                    any())).thenAnswer(inv -> {
+                        java.util.function.Supplier<ResponseEntity<TransferResponse>> action = inv.getArgument(5);
+                        return action.get();
+                    });
+
+            String jsonWithoutUser = createTransferJson(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, 5000L, "USD", null, null);
+
+            mockMvc.perform(post("/api/v1/transfers").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, IDEMP_KEY)
+                    .contentType(MediaType.APPLICATION_JSON).content(jsonWithoutUser)).andExpect(status().isCreated())
+                    .andExpect(header().string("Location", "/api/v1/transfers/" + TRANSFER_ID))
+                    .andExpect(jsonPath("$.id").value(TRANSFER_ID.toString()));
+
+            verify(idempotencyService).execute(eq(FROM_ACCOUNT_ID), eq(IDEMP_KEY),
+                    eq(TransferController.TRANSFER_ENDPOINT), any(TransferRequest.class), eq(TransferResponse.class),
+                    any());
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers: Should bypass idempotency when key is omitted")
+        void shouldBypassIdempotencyWhenKeyIsOmittedForTransfer() throws Exception {
+            Money expectedMoney = Money.ofMinor(5000L, "USD");
+            when(transferService.transfer(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, expectedMoney, "Invoice #101", USER_ID))
+                    .thenReturn(sampleTransfer);
+
+            String validJson = createTransferJson(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, 5000L, "USD", "Invoice #101",
+                    USER_ID);
+
+            mockMvc.perform(post("/api/v1/transfers").contentType(MediaType.APPLICATION_JSON).content(validJson))
+                    .andExpect(status().isCreated())
+                    .andExpect(header().string("Location", "/api/v1/transfers/" + TRANSFER_ID))
+                    .andExpect(header().doesNotExist(IdempotencyService.X_SERVED_FROM_CACHE_HEADER))
+                    .andExpect(jsonPath("$.id").value(TRANSFER_ID.toString()));
+
+            verify(idempotencyService, never()).execute(any(), any(), any(), any(), any(), any());
+            verify(transferService).transfer(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, expectedMoney, "Invoice #101", USER_ID);
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers: Should bypass idempotency when key is blank whitespace")
+        void shouldBypassIdempotencyWhenKeyIsBlankForTransfer() throws Exception {
+            Money expectedMoney = Money.ofMinor(5000L, "USD");
+            when(transferService.transfer(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, expectedMoney, "Invoice #101", USER_ID))
+                    .thenReturn(sampleTransfer);
+
+            String validJson = createTransferJson(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, 5000L, "USD", "Invoice #101",
+                    USER_ID);
+
+            mockMvc.perform(post("/api/v1/transfers").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, "   ")
+                    .contentType(MediaType.APPLICATION_JSON).content(validJson)).andExpect(status().isCreated())
+                    .andExpect(header().string("Location", "/api/v1/transfers/" + TRANSFER_ID))
+                    .andExpect(header().doesNotExist(IdempotencyService.X_SERVED_FROM_CACHE_HEADER))
+                    .andExpect(jsonPath("$.id").value(TRANSFER_ID.toString()));
+
+            verify(idempotencyService, never()).execute(any(), any(), any(), any(), any(), any());
+            verify(transferService).transfer(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, expectedMoney, "Invoice #101", USER_ID);
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers: Should return cached response with X-Served-From-Cache header")
+        void shouldReturnCachedResponseWithServedFromCacheHeaderForTransfer() throws Exception {
+            ResponseEntity<TransferResponse> cachedResponse = createCachedTransferResponse();
+
+            when(idempotencyService.execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.TRANSFER_ENDPOINT),
+                    any(TransferRequest.class), eq(TransferResponse.class), any())).thenReturn(cachedResponse);
+
+            String validJson = createTransferJson(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, 5000L, "USD", "Invoice #101",
+                    USER_ID);
+
+            mockMvc.perform(post("/api/v1/transfers").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, IDEMP_KEY)
+                    .contentType(MediaType.APPLICATION_JSON).content(validJson)).andExpect(status().isCreated())
+                    .andExpect(header().string(IdempotencyService.X_SERVED_FROM_CACHE_HEADER, "true"))
+                    .andExpect(header().string("Location", "/api/v1/transfers/" + TRANSFER_ID))
+                    .andExpect(jsonPath("$.id").value(TRANSFER_ID.toString()))
+                    .andExpect(jsonPath("$.amountInMinorUnits").value(5000))
+                    .andExpect(jsonPath("$.status").value("COMPLETED"));
+
+            verify(transferService, never()).transfer(any(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers: Should return 409 Conflict when key is PROCESSING")
+        void shouldReturn409ConflictWhenTransferKeyIsProcessing() throws Exception {
+            when(idempotencyService.execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.TRANSFER_ENDPOINT),
+                    any(TransferRequest.class), eq(TransferResponse.class), any()))
+                            .thenThrow(new IdempotencyConflictException(IDEMP_KEY));
+
+            String validJson = createTransferJson(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, 5000L, "USD", "Invoice #101",
+                    USER_ID);
+
+            mockMvc.perform(post("/api/v1/transfers").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, IDEMP_KEY)
+                    .contentType(MediaType.APPLICATION_JSON).content(validJson)).andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.type").value("urn:problem-type:idempotency-conflict"))
+                    .andExpect(jsonPath("$.title").value("Idempotency Conflict"))
+                    .andExpect(jsonPath("$.status").value(409)).andExpect(jsonPath("$.idempotencyKey").value(IDEMP_KEY))
+                    .andExpect(jsonPath("$.detail")
+                            .value(containsString("is currently being processed by another request")))
+                    .andExpect(jsonPath("$.instance").value("/api/v1/transfers"));
+
+            verify(transferService, never()).transfer(any(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers: Should return 422 Unprocessable Content when payload mismatches")
+        void shouldReturn422UnprocessableContentWhenTransferPayloadMismatches() throws Exception {
+            when(idempotencyService.execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.TRANSFER_ENDPOINT),
+                    any(TransferRequest.class), eq(TransferResponse.class), any()))
+                            .thenThrow(new IdempotencyPayloadMismatchException(IDEMP_KEY,
+                                    "Payload hash mismatch for idempotency key '" + IDEMP_KEY + "'"));
+
+            String validJson = createTransferJson(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, 5000L, "USD", "Invoice #101",
+                    USER_ID);
+
+            mockMvc.perform(post("/api/v1/transfers").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, IDEMP_KEY)
+                    .contentType(MediaType.APPLICATION_JSON).content(validJson))
+                    .andExpect(status().isUnprocessableContent())
+                    .andExpect(jsonPath("$.type").value("urn:problem-type:idempotency-payload-mismatch"))
+                    .andExpect(jsonPath("$.title").value("Idempotency Payload Mismatch"))
+                    .andExpect(jsonPath("$.status").value(422)).andExpect(jsonPath("$.idempotencyKey").value(IDEMP_KEY))
+                    .andExpect(
+                            jsonPath("$.detail").value("Payload hash mismatch for idempotency key '" + IDEMP_KEY + "'"))
+                    .andExpect(jsonPath("$.instance").value("/api/v1/transfers"));
+
+            verify(transferService, never()).transfer(any(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers: Should propagate domain exceptions from delegate action to exception handler")
+        void shouldPropagateDomainExceptionWhenActionFailsUnderIdempotency() throws Exception {
+            Money expectedMoney = Money.ofMinor(5000L, "USD");
+            when(idempotencyService.execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.TRANSFER_ENDPOINT),
+                    any(TransferRequest.class), eq(TransferResponse.class), any()))
+                            .thenThrow(new InsufficientFundsException(FROM_ACCOUNT_ID, expectedMoney,
+                                    Money.ofMinor(1000L, "USD")));
+
+            String validJson = createTransferJson(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, 5000L, "USD", "Invoice #101",
+                    USER_ID);
+
+            mockMvc.perform(post("/api/v1/transfers").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, IDEMP_KEY)
+                    .contentType(MediaType.APPLICATION_JSON).content(validJson))
+                    .andExpect(status().isUnprocessableContent())
+                    .andExpect(jsonPath("$.type").value("urn:problem-type:insufficient-funds"))
+                    .andExpect(jsonPath("$.title").value("Insufficient Funds"))
+                    .andExpect(jsonPath("$.status").value(422))
+                    .andExpect(jsonPath("$.accountId").value(FROM_ACCOUNT_ID.toString()))
+                    .andExpect(jsonPath("$.requestedAmount").value(expectedMoney.toString()))
+                    .andExpect(jsonPath("$.currentBalance").value(Money.ofMinor(1000L, "USD").toString()));
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers/deposit: Should delegate to IdempotencyService on first execution")
+        void shouldDelegateToIdempotencyServiceOnFirstExecutionForDeposit() throws Exception {
+            Money expectedMoney = Money.ofMinor(5000L, "USD");
+            when(transferService.deposit(TO_ACCOUNT_ID, expectedMoney, "Cash deposit", USER_ID))
+                    .thenReturn(sampleTransfer);
+
+            when(idempotencyService.execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.DEPOSIT_ENDPOINT),
+                    any(DepositRequest.class), eq(TransferResponse.class), any())).thenAnswer(inv -> {
+                        java.util.function.Supplier<ResponseEntity<TransferResponse>> action = inv.getArgument(5);
+                        return action.get();
+                    });
+
+            String depositJson = createDepositJson(TO_ACCOUNT_ID, 5000L, "USD", "Cash deposit", USER_ID);
+
+            mockMvc.perform(
+                    post("/api/v1/transfers/deposit").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, IDEMP_KEY)
+                            .contentType(MediaType.APPLICATION_JSON).content(depositJson))
+                    .andExpect(status().isCreated())
+                    .andExpect(header().string("Location", "/api/v1/transfers/" + TRANSFER_ID))
+                    .andExpect(header().doesNotExist(IdempotencyService.X_SERVED_FROM_CACHE_HEADER))
+                    .andExpect(jsonPath("$.id").value(TRANSFER_ID.toString()));
+
+            verify(idempotencyService).execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.DEPOSIT_ENDPOINT),
+                    any(DepositRequest.class), eq(TransferResponse.class), any());
+            verify(transferService).deposit(TO_ACCOUNT_ID, expectedMoney, "Cash deposit", USER_ID);
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers/deposit: Should bypass idempotency when key is omitted")
+        void shouldBypassIdempotencyWhenKeyIsOmittedForDeposit() throws Exception {
+            Money expectedMoney = Money.ofMinor(5000L, "USD");
+            when(transferService.deposit(TO_ACCOUNT_ID, expectedMoney, "Cash deposit", USER_ID))
+                    .thenReturn(sampleTransfer);
+
+            String depositJson = createDepositJson(TO_ACCOUNT_ID, 5000L, "USD", "Cash deposit", USER_ID);
+
+            mockMvc.perform(
+                    post("/api/v1/transfers/deposit").contentType(MediaType.APPLICATION_JSON).content(depositJson))
+                    .andExpect(status().isCreated())
+                    .andExpect(header().string("Location", "/api/v1/transfers/" + TRANSFER_ID))
+                    .andExpect(header().doesNotExist(IdempotencyService.X_SERVED_FROM_CACHE_HEADER))
+                    .andExpect(jsonPath("$.id").value(TRANSFER_ID.toString()));
+
+            verify(idempotencyService, never()).execute(any(), any(), any(), any(), any(), any());
+            verify(transferService).deposit(TO_ACCOUNT_ID, expectedMoney, "Cash deposit", USER_ID);
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers/deposit: Should bypass idempotency when key is blank")
+        void shouldBypassIdempotencyWhenKeyIsBlankForDeposit() throws Exception {
+            Money expectedMoney = Money.ofMinor(5000L, "USD");
+            when(transferService.deposit(TO_ACCOUNT_ID, expectedMoney, "Cash deposit", USER_ID))
+                    .thenReturn(sampleTransfer);
+
+            String depositJson = createDepositJson(TO_ACCOUNT_ID, 5000L, "USD", "Cash deposit", USER_ID);
+
+            mockMvc.perform(post("/api/v1/transfers/deposit").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, "")
+                    .contentType(MediaType.APPLICATION_JSON).content(depositJson)).andExpect(status().isCreated())
+                    .andExpect(header().string("Location", "/api/v1/transfers/" + TRANSFER_ID))
+                    .andExpect(header().doesNotExist(IdempotencyService.X_SERVED_FROM_CACHE_HEADER))
+                    .andExpect(jsonPath("$.id").value(TRANSFER_ID.toString()));
+
+            verify(idempotencyService, never()).execute(any(), any(), any(), any(), any(), any());
+            verify(transferService).deposit(TO_ACCOUNT_ID, expectedMoney, "Cash deposit", USER_ID);
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers/deposit: Should return cached response with X-Served-From-Cache header")
+        void shouldReturnCachedResponseWithServedFromCacheHeaderForDeposit() throws Exception {
+            ResponseEntity<TransferResponse> cachedResponse = createCachedTransferResponse();
+
+            when(idempotencyService.execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.DEPOSIT_ENDPOINT),
+                    any(DepositRequest.class), eq(TransferResponse.class), any())).thenReturn(cachedResponse);
+
+            String depositJson = createDepositJson(TO_ACCOUNT_ID, 5000L, "USD", "Cash deposit", USER_ID);
+
+            mockMvc.perform(
+                    post("/api/v1/transfers/deposit").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, IDEMP_KEY)
+                            .contentType(MediaType.APPLICATION_JSON).content(depositJson))
+                    .andExpect(status().isCreated())
+                    .andExpect(header().string(IdempotencyService.X_SERVED_FROM_CACHE_HEADER, "true"))
+                    .andExpect(header().string("Location", "/api/v1/transfers/" + TRANSFER_ID))
+                    .andExpect(jsonPath("$.id").value(TRANSFER_ID.toString()));
+
+            verify(transferService, never()).deposit(any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers/deposit: Should return 409 Conflict when key is PROCESSING")
+        void shouldReturn409ConflictWhenDepositKeyIsProcessing() throws Exception {
+            when(idempotencyService.execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.DEPOSIT_ENDPOINT),
+                    any(DepositRequest.class), eq(TransferResponse.class), any()))
+                            .thenThrow(new IdempotencyConflictException(IDEMP_KEY));
+
+            String depositJson = createDepositJson(TO_ACCOUNT_ID, 5000L, "USD", "Cash deposit", USER_ID);
+
+            mockMvc.perform(
+                    post("/api/v1/transfers/deposit").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, IDEMP_KEY)
+                            .contentType(MediaType.APPLICATION_JSON).content(depositJson))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.type").value("urn:problem-type:idempotency-conflict"))
+                    .andExpect(jsonPath("$.title").value("Idempotency Conflict"))
+                    .andExpect(jsonPath("$.status").value(409)).andExpect(jsonPath("$.idempotencyKey").value(IDEMP_KEY))
+                    .andExpect(jsonPath("$.instance").value("/api/v1/transfers/deposit"));
+
+            verify(transferService, never()).deposit(any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/transfers/deposit: Should return 422 Unprocessable Content when payload mismatches")
+        void shouldReturn422UnprocessableContentWhenDepositPayloadMismatches() throws Exception {
+            when(idempotencyService.execute(eq(USER_ID), eq(IDEMP_KEY), eq(TransferController.DEPOSIT_ENDPOINT),
+                    any(DepositRequest.class), eq(TransferResponse.class), any()))
+                            .thenThrow(new IdempotencyPayloadMismatchException(IDEMP_KEY, "Payload hash mismatch"));
+
+            String depositJson = createDepositJson(TO_ACCOUNT_ID, 5000L, "USD", "Cash deposit", USER_ID);
+
+            mockMvc.perform(
+                    post("/api/v1/transfers/deposit").header(IdempotencyService.IDEMPOTENCY_KEY_HEADER, IDEMP_KEY)
+                            .contentType(MediaType.APPLICATION_JSON).content(depositJson))
+                    .andExpect(status().isUnprocessableContent())
+                    .andExpect(jsonPath("$.type").value("urn:problem-type:idempotency-payload-mismatch"))
+                    .andExpect(jsonPath("$.title").value("Idempotency Payload Mismatch"))
+                    .andExpect(jsonPath("$.status").value(422)).andExpect(jsonPath("$.idempotencyKey").value(IDEMP_KEY))
+                    .andExpect(jsonPath("$.detail").value("Payload hash mismatch"))
+                    .andExpect(jsonPath("$.instance").value("/api/v1/transfers/deposit"));
+
+            verify(transferService, never()).deposit(any(), any(), any(), any());
         }
     }
 }
