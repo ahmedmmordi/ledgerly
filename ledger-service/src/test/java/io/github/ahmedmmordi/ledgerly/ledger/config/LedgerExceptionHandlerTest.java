@@ -8,6 +8,8 @@ import io.github.ahmedmmordi.ledgerly.ledger.domain.CurrencyMismatchException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.InsufficientFundsException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.Money;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.TransferNotFoundException;
+import io.github.ahmedmmordi.ledgerly.ledger.idempotency.IdempotencyConflictException;
+import io.github.ahmedmmordi.ledgerly.ledger.idempotency.IdempotencyPayloadMismatchException;
 import java.net.URI;
 import java.util.Currency;
 import java.util.UUID;
@@ -139,5 +141,85 @@ class LedgerExceptionHandlerTest {
         assertThat(problem.getTitle()).isEqualTo("Invalid Argument");
         assertThat(problem.getType()).isEqualTo(URI.create("urn:problem-type:bad-request"));
         assertThat(problem.getDetail()).isEqualTo("Currency must not be blank");
+    }
+
+    @Test
+    @DisplayName("Should handle IdempotencyConflictException with idempotencyKey")
+    void shouldHandleIdempotencyConflict() {
+        IdempotencyConflictException ex = new IdempotencyConflictException("key-conflict-123");
+
+        ProblemDetail problem = handler.handleIdempotencyConflict(ex);
+
+        assertThat(ex.getIdempotencyKey()).isEqualTo("key-conflict-123");
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(problem.getTitle()).isEqualTo("Idempotency Conflict");
+        assertThat(problem.getType()).isEqualTo(URI.create("urn:problem-type:idempotency-conflict"));
+        assertThat(problem.getDetail())
+                .isEqualTo("Idempotency key 'key-conflict-123' is currently being processed by another request");
+        assertThat(problem.getProperties()).containsEntry("idempotencyKey", "key-conflict-123");
+    }
+
+    @Test
+    @DisplayName("Should handle IdempotencyConflictException with null key")
+    void shouldHandleIdempotencyConflictWithNullKey() {
+        IdempotencyConflictException ex = new IdempotencyConflictException(null);
+
+        ProblemDetail problem = handler.handleIdempotencyConflict(ex);
+
+        assertThat(ex.getIdempotencyKey()).isNull();
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(problem.getTitle()).isEqualTo("Idempotency Conflict");
+        assertThat(problem.getType()).isEqualTo(URI.create("urn:problem-type:idempotency-conflict"));
+        assertThat(problem.getDetail())
+                .isEqualTo("Idempotency key 'null' is currently being processed by another request");
+        assertThat(problem.getProperties()).isNull();
+    }
+
+    @Test
+    @DisplayName("Should handle IdempotencyPayloadMismatchException with default message and key")
+    void shouldHandleIdempotencyPayloadMismatch() {
+        IdempotencyPayloadMismatchException ex = new IdempotencyPayloadMismatchException("key-mismatch-456");
+
+        ProblemDetail problem = handler.handleIdempotencyPayloadMismatch(ex);
+
+        assertThat(ex.getIdempotencyKey()).isEqualTo("key-mismatch-456");
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT.value());
+        assertThat(problem.getTitle()).isEqualTo("Idempotency Payload Mismatch");
+        assertThat(problem.getType()).isEqualTo(URI.create("urn:problem-type:idempotency-payload-mismatch"));
+        assertThat(problem.getDetail())
+                .isEqualTo("Payload for idempotency key 'key-mismatch-456' does not match the original request");
+        assertThat(problem.getProperties()).containsEntry("idempotencyKey", "key-mismatch-456");
+    }
+
+    @Test
+    @DisplayName("Should handle IdempotencyPayloadMismatchException with custom message and non-null key")
+    void shouldHandleIdempotencyPayloadMismatchWithCustomMessageAndKey() {
+        IdempotencyPayloadMismatchException ex = new IdempotencyPayloadMismatchException("key-mismatch-789",
+                "Endpoint mismatch for idempotency key 'key-mismatch-789'");
+
+        ProblemDetail problem = handler.handleIdempotencyPayloadMismatch(ex);
+
+        assertThat(ex.getIdempotencyKey()).isEqualTo("key-mismatch-789");
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT.value());
+        assertThat(problem.getTitle()).isEqualTo("Idempotency Payload Mismatch");
+        assertThat(problem.getType()).isEqualTo(URI.create("urn:problem-type:idempotency-payload-mismatch"));
+        assertThat(problem.getDetail()).isEqualTo("Endpoint mismatch for idempotency key 'key-mismatch-789'");
+        assertThat(problem.getProperties()).containsEntry("idempotencyKey", "key-mismatch-789");
+    }
+
+    @Test
+    @DisplayName("Should handle IdempotencyPayloadMismatchException with custom message and null key")
+    void shouldHandleIdempotencyPayloadMismatchWithCustomMessageAndNullKey() {
+        IdempotencyPayloadMismatchException ex = new IdempotencyPayloadMismatchException(null,
+                "Endpoint mismatch for idempotency key 'null'");
+
+        ProblemDetail problem = handler.handleIdempotencyPayloadMismatch(ex);
+
+        assertThat(ex.getIdempotencyKey()).isNull();
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT.value());
+        assertThat(problem.getTitle()).isEqualTo("Idempotency Payload Mismatch");
+        assertThat(problem.getType()).isEqualTo(URI.create("urn:problem-type:idempotency-payload-mismatch"));
+        assertThat(problem.getDetail()).isEqualTo("Endpoint mismatch for idempotency key 'null'");
+        assertThat(problem.getProperties()).isNull();
     }
 }
