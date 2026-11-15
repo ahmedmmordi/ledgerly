@@ -3,12 +3,15 @@ package io.github.ahmedmmordi.ledgerly.ledger.transfer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import io.github.ahmedmmordi.ledgerly.common.event.TransferCompletedEvent;
 import io.github.ahmedmmordi.ledgerly.ledger.account.Account;
 import io.github.ahmedmmordi.ledgerly.ledger.account.AccountRepository;
 import io.github.ahmedmmordi.ledgerly.ledger.account.AccountService;
@@ -19,6 +22,7 @@ import io.github.ahmedmmordi.ledgerly.ledger.domain.CurrencyMismatchException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.InsufficientFundsException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.Money;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.TransferNotFoundException;
+import io.github.ahmedmmordi.ledgerly.ledger.outbox.OutboxService;
 import io.github.ahmedmmordi.ledgerly.ledger.transfer.rule.TransferContext;
 import io.github.ahmedmmordi.ledgerly.ledger.transfer.rule.TransferRule;
 import java.util.Collections;
@@ -69,12 +73,15 @@ class TransferServiceTest {
     @Mock
     private TransferRule mockRule2;
 
+    @Mock
+    private OutboxService outboxService;
+
     private TransferService transferService;
 
     @BeforeEach
     void setUp() {
         transferService = new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                accountService, List.of(mockRule1, mockRule2));
+                accountService, List.of(mockRule1, mockRule2), outboxService);
     }
 
     private Account createMockAccount(UUID id, String accountNumber, String currency, long balance, AccountType type) {
@@ -95,7 +102,7 @@ class TransferServiceTest {
         @DisplayName("Should reject null AccountRepository")
         void shouldRejectNullAccountRepository() {
             assertThatThrownBy(() -> new TransferService(null, transferRepository, ledgerEntryRepository,
-                    accountService, List.of(mockRule1))).isInstanceOf(NullPointerException.class)
+                    accountService, List.of(mockRule1), outboxService)).isInstanceOf(NullPointerException.class)
                             .hasMessage("AccountRepository must not be null");
         }
 
@@ -103,7 +110,7 @@ class TransferServiceTest {
         @DisplayName("Should reject null TransferRepository")
         void shouldRejectNullTransferRepository() {
             assertThatThrownBy(() -> new TransferService(accountRepository, null, ledgerEntryRepository, accountService,
-                    List.of(mockRule1))).isInstanceOf(NullPointerException.class)
+                    List.of(mockRule1), outboxService)).isInstanceOf(NullPointerException.class)
                             .hasMessage("TransferRepository must not be null");
         }
 
@@ -111,7 +118,7 @@ class TransferServiceTest {
         @DisplayName("Should reject null LedgerEntryRepository")
         void shouldRejectNullLedgerEntryRepository() {
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, null, accountService,
-                    List.of(mockRule1))).isInstanceOf(NullPointerException.class)
+                    List.of(mockRule1), outboxService)).isInstanceOf(NullPointerException.class)
                             .hasMessage("LedgerEntryRepository must not be null");
         }
 
@@ -119,15 +126,23 @@ class TransferServiceTest {
         @DisplayName("Should reject null AccountService")
         void shouldRejectNullAccountService() {
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    null, List.of(mockRule1))).isInstanceOf(NullPointerException.class)
+                    null, List.of(mockRule1), outboxService)).isInstanceOf(NullPointerException.class)
                             .hasMessage("AccountService must not be null");
+        }
+
+        @Test
+        @DisplayName("Should reject null OutboxService")
+        void shouldRejectNullOutboxService() {
+            assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
+                    accountService, List.of(mockRule1), null)).isInstanceOf(NullPointerException.class)
+                            .hasMessage("OutboxService must not be null");
         }
 
         @Test
         @DisplayName("Should reject null rules list")
         void shouldRejectNullRulesList() {
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    accountService, null)).isInstanceOf(NullPointerException.class)
+                    accountService, null, outboxService)).isInstanceOf(NullPointerException.class)
                             .hasMessage("Transfer rules must not be null");
         }
 
@@ -136,7 +151,7 @@ class TransferServiceTest {
         void shouldRejectEmptyRulesList() {
             List<TransferRule> empty = Collections.emptyList();
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    accountService, empty)).isInstanceOf(IllegalArgumentException.class)
+                    accountService, empty, outboxService)).isInstanceOf(IllegalArgumentException.class)
                             .hasMessage("Transfer rules must not be empty");
         }
 
@@ -145,7 +160,7 @@ class TransferServiceTest {
         void shouldRejectNullRuleElement() {
             List<TransferRule> rulesWithNull = Collections.singletonList(null);
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    accountService, rulesWithNull)).isInstanceOf(NullPointerException.class)
+                    accountService, rulesWithNull, outboxService)).isInstanceOf(NullPointerException.class)
                             .hasMessage("Transfer rule must not be null");
         }
 
@@ -173,7 +188,7 @@ class TransferServiceTest {
             }
 
             TransferService service = new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    accountService, List.of(new RuleOrder20(), new RuleOrder5()));
+                    accountService, List.of(new RuleOrder20(), new RuleOrder5()), outboxService);
 
             Account sender = createMockAccount(ID_LOWER, "ACC1111111111", "USD", 10_000L, AccountType.CUSTOMER);
             Account receiver = createMockAccount(ID_HIGHER, "ACC2222222222", "USD", 5_000L, AccountType.CUSTOMER);
@@ -297,6 +312,18 @@ class TransferServiceTest {
                     .isEqualTo(Money.ofMinor(8_000L, "USD"));
 
             assertThat(debitEntry.getAmount()).isEqualTo(creditEntry.getAmount());
+
+            ArgumentCaptor<TransferCompletedEvent> eventCaptor = ArgumentCaptor.forClass(TransferCompletedEvent.class);
+            verify(outboxService).recordEvent(eq(TransferCompletedEvent.AGGREGATE_TYPE), eq(TRANSFER_ID),
+                    eq(TransferCompletedEvent.EVENT_TYPE), eventCaptor.capture());
+
+            TransferCompletedEvent recordedEvent = eventCaptor.getValue();
+            assertThat(recordedEvent.transferId()).isEqualTo(TRANSFER_ID);
+            assertThat(recordedEvent.fromAccountId()).isEqualTo(ID_LOWER);
+            assertThat(recordedEvent.toAccountId()).isEqualTo(ID_HIGHER);
+            assertThat(recordedEvent.amountInMinorUnits()).isEqualTo(3_000L);
+            assertThat(recordedEvent.currency()).isEqualTo("USD");
+            assertThat(recordedEvent.version()).isEqualTo(TransferCompletedEvent.CURRENT_VERSION);
         }
 
         @Test
@@ -387,7 +414,19 @@ class TransferServiceTest {
 
             verify(accountRepository).save(systemAccount);
             verify(accountRepository).save(customerAccount);
-            verify(ledgerEntryRepository, org.mockito.Mockito.times(2)).save(any(LedgerEntry.class));
+            verify(ledgerEntryRepository, times(2)).save(any(LedgerEntry.class));
+
+            ArgumentCaptor<TransferCompletedEvent> eventCaptor = ArgumentCaptor.forClass(TransferCompletedEvent.class);
+            verify(outboxService).recordEvent(eq(TransferCompletedEvent.AGGREGATE_TYPE), eq(TRANSFER_ID),
+                    eq(TransferCompletedEvent.EVENT_TYPE), eventCaptor.capture());
+
+            TransferCompletedEvent recordedEvent = eventCaptor.getValue();
+            assertThat(recordedEvent.transferId()).isEqualTo(TRANSFER_ID);
+            assertThat(recordedEvent.fromAccountId()).isEqualTo(SYSTEM_ACCOUNT_ID);
+            assertThat(recordedEvent.toAccountId()).isEqualTo(ID_HIGHER);
+            assertThat(recordedEvent.amountInMinorUnits()).isEqualTo(10_000L);
+            assertThat(recordedEvent.currency()).isEqualTo("USD");
+            assertThat(recordedEvent.version()).isEqualTo(TransferCompletedEvent.CURRENT_VERSION);
         }
 
         @Test
@@ -537,6 +576,7 @@ class TransferServiceTest {
                             .hasMessage("From account and to account must be distinct");
 
             verify(accountRepository, never()).findByIdForUpdate(any());
+            verify(outboxService, never()).recordEvent(any(), any(), any(), any());
         }
 
         @Test
@@ -553,6 +593,7 @@ class TransferServiceTest {
                             .hasMessage("Transfer amount must be strictly positive");
 
             verify(accountRepository, never()).findByIdForUpdate(any());
+            verify(outboxService, never()).recordEvent(any(), any(), any(), any());
         }
     }
 
@@ -613,6 +654,7 @@ class TransferServiceTest {
             verify(accountRepository, never()).save(any());
             verify(transferRepository, never()).save(any());
             verify(ledgerEntryRepository, never()).save(any());
+            verify(outboxService, never()).recordEvent(any(), any(), any(), any());
         }
 
         @Test
@@ -634,6 +676,7 @@ class TransferServiceTest {
             verify(accountRepository, never()).save(any());
             verify(transferRepository, never()).save(any());
             verify(ledgerEntryRepository, never()).save(any());
+            verify(outboxService, never()).recordEvent(any(), any(), any(), any());
         }
 
         @Test
@@ -655,6 +698,7 @@ class TransferServiceTest {
             verify(accountRepository, never()).save(any());
             verify(transferRepository, never()).save(any());
             verify(ledgerEntryRepository, never()).save(any());
+            verify(outboxService, never()).recordEvent(any(), any(), any(), any());
         }
     }
 
@@ -676,6 +720,7 @@ class TransferServiceTest {
 
             verify(accountRepository, never()).findByIdForUpdate(ID_HIGHER);
             verify(transferRepository, never()).save(any());
+            verify(outboxService, never()).recordEvent(any(), any(), any(), any());
         }
 
         @Test
@@ -694,6 +739,7 @@ class TransferServiceTest {
                             });
 
             verify(transferRepository, never()).save(any());
+            verify(outboxService, never()).recordEvent(any(), any(), any(), any());
         }
     }
 
@@ -747,7 +793,7 @@ class TransferServiceTest {
             Page<Transfer> result = transferService.getTransfersByAccountId(ID_LOWER, pageable);
 
             assertThat(result.getContent()).hasSize(1);
-            assertThat(result.getContent().get(0)).isSameAs(t1);
+            assertThat(result.getContent().getFirst()).isSameAs(t1);
             verify(transferRepository).findByAccountId(ID_LOWER, pageable);
         }
 
@@ -786,7 +832,7 @@ class TransferServiceTest {
             Page<Transfer> result = transferService.getTransfersByInitiatedUserId(USER_ID, pageable);
 
             assertThat(result.getContent()).hasSize(1);
-            assertThat(result.getContent().get(0)).isSameAs(t1);
+            assertThat(result.getContent().getFirst()).isSameAs(t1);
             verify(transferRepository).findByInitiatedByUserId(USER_ID, pageable);
         }
 
@@ -850,7 +896,7 @@ class TransferServiceTest {
             Page<LedgerEntry> result = transferService.getLedgerEntriesByAccountId(ID_LOWER, pageable);
 
             assertThat(result.getContent()).hasSize(1);
-            assertThat(result.getContent().get(0)).isSameAs(entry);
+            assertThat(result.getContent().getFirst()).isSameAs(entry);
             verify(ledgerEntryRepository).findByAccountIdOrderByCreatedAtDesc(ID_LOWER, pageable);
         }
 
