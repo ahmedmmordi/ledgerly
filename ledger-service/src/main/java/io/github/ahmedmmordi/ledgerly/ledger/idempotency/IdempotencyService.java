@@ -36,6 +36,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @NullMarked
 public class IdempotencyService {
 
+    public static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
     public static final String X_SERVED_FROM_CACHE_HEADER = "X-Served-From-Cache";
     public static final Duration DEFAULT_TTL = Duration.ofHours(24);
 
