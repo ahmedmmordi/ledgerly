@@ -5,8 +5,18 @@ spring:
     password: postgres
   jpa:
     show-sql: false
+  kafka:
+    bootstrap-servers: localhost:9093
+    admin:
+      auto-create: true
 
 ledger:
   idempotency:
     ttl: 24h
-
+  outbox:
+    poller:
+      enabled: true
+      fixed-delay-ms: 1000
+      batch-size: 50
+      max-retries: 3
+      send-timeout-seconds: 5

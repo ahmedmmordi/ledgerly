@@ -21,6 +21,10 @@ spring:
   threads:
     virtual:
       enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9093}
+    admin:
+      auto-create: ${KAFKA_ADMIN_AUTO_CREATE:true}
 
 server:
   port: 8082
@@ -37,5 +41,10 @@ springdoc:
 ledger:
   idempotency:
     ttl: ${LEDGER_IDEMPOTENCY_TTL:24h}
-
-
+  outbox:
+    poller:
+      enabled: ${OUTBOX_POLLER_ENABLED:true}
+      fixed-delay-ms: ${OUTBOX_POLLER_DELAY_MS:1000}
+      batch-size: ${OUTBOX_POLLER_BATCH_SIZE:50}
+      max-retries: ${OUTBOX_POLLER_MAX_RETRIES:3}
+      send-timeout-seconds: ${OUTBOX_POLLER_TIMEOUT_SECONDS:5}
