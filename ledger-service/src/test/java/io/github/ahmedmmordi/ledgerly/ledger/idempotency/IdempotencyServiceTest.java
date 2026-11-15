@@ -114,11 +114,10 @@ class IdempotencyServiceTest {
         }
 
         @Test
-        @DisplayName("Should use default TTL when null is provided")
-        void shouldUseDefaultTtlWhenNull() {
-            IdempotencyService customService = new IdempotencyService(repository, transactionManager, objectMapper,
-                    null);
-            assertThat(ReflectionTestUtils.getField(customService, "ttl")).isEqualTo(Duration.ofHours(24));
+        @DisplayName("Should fail when TTL is null")
+        void shouldFailWhenTtlIsNull() {
+            assertThatThrownBy(() -> new IdempotencyService(repository, transactionManager, objectMapper, null))
+                    .isInstanceOf(NullPointerException.class).hasMessage("TTL must not be null");
         }
     }
 
