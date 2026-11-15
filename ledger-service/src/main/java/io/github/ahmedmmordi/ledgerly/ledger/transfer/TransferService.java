@@ -1,11 +1,13 @@
 package io.github.ahmedmmordi.ledgerly.ledger.transfer;
 
+import io.github.ahmedmmordi.ledgerly.common.event.TransferCompletedEvent;
 import io.github.ahmedmmordi.ledgerly.ledger.account.Account;
 import io.github.ahmedmmordi.ledgerly.ledger.account.AccountRepository;
 import io.github.ahmedmmordi.ledgerly.ledger.account.AccountService;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.AccountNotFoundException;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.Money;
 import io.github.ahmedmmordi.ledgerly.ledger.domain.TransferNotFoundException;
+import io.github.ahmedmmordi.ledgerly.ledger.outbox.OutboxService;
 import io.github.ahmedmmordi.ledgerly.ledger.transfer.rule.TransferContext;
 import io.github.ahmedmmordi.ledgerly.ledger.transfer.rule.TransferRule;
 import java.util.ArrayList;
@@ -29,14 +31,17 @@ public class TransferService {
     private final LedgerEntryRepository ledgerEntryRepository;
     private final AccountService accountService;
     private final List<TransferRule> rules;
+    private final OutboxService outboxService;
 
     public TransferService(AccountRepository accountRepository, TransferRepository transferRepository,
-            LedgerEntryRepository ledgerEntryRepository, AccountService accountService, List<TransferRule> rules) {
+            LedgerEntryRepository ledgerEntryRepository, AccountService accountService, List<TransferRule> rules,
+            OutboxService outboxService) {
         this.accountRepository = Objects.requireNonNull(accountRepository, "AccountRepository must not be null");
         this.transferRepository = Objects.requireNonNull(transferRepository, "TransferRepository must not be null");
         this.ledgerEntryRepository = Objects.requireNonNull(ledgerEntryRepository,
                 "LedgerEntryRepository must not be null");
         this.accountService = Objects.requireNonNull(accountService, "AccountService must not be null");
+        this.outboxService = Objects.requireNonNull(outboxService, "OutboxService must not be null");
         Objects.requireNonNull(rules, "Transfer rules must not be null");
         if (rules.isEmpty()) {
             throw new IllegalArgumentException("Transfer rules must not be empty");
@@ -93,6 +98,11 @@ public class TransferService {
                 toAccount.getBalance());
         ledgerEntryRepository.save(debitEntry);
         ledgerEntryRepository.save(creditEntry);
+
+        TransferCompletedEvent event = TransferCompletedEvent.of(savedTransfer.getId(), fromAccountId, toAccountId,
+                amount.amountInMinorUnits(), savedTransfer.getCurrency());
+        outboxService.recordEvent(TransferCompletedEvent.AGGREGATE_TYPE, savedTransfer.getId(),
+                TransferCompletedEvent.EVENT_TYPE, event);
 
         log.info("Completed transfer {} of {} minor units from account {} to account {}", savedTransfer.getId(),
                 amount.amountInMinorUnits(), fromAccountId, toAccountId);
