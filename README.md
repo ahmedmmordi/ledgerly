@@ -11,7 +11,7 @@ Ledgerly is a mini core banking backend built with a **microservices architectur
 | **api-gateway** | Routing, JWT validation, Redis rate limiting | Redis | 8080 | Planned |
 | **identity-service** | User registration, authentication, JWT issuing | PostgreSQL (Port 5433) | 8081 | Active |
 | **ledger-service** | Accounts, double-entry ledger, atomic transfers, outbox | PostgreSQL (Port 5436) | 8082 | Active |
-| **statement-service** | Kafka event consumer, monthly statements, CSV exports | MongoDB (Port 27018) | 8083 | Planned |
+| **statement-service** | Kafka event consumer, monthly statements, CSV exports | MongoDB (Port 27018) | 8083 | In Progress |
 
 ---
 
@@ -19,10 +19,10 @@ Ledgerly is a mini core banking backend built with a **microservices architectur
 
 * **Runtime:** Java 25 (Virtual Threads enabled via `spring.threads.virtual.enabled=true`)
 * **Framework:** Spring Boot 4 (Multi-module Maven)
-* **Databases:** PostgreSQL 18 (Alpine) per microservice, Flyway schema migrations
-* **ORM:** Spring Data JPA / Hibernate 7
+* **Databases:** PostgreSQL 18 (Alpine) per relational microservice, MongoDB 7 (statement-service), Flyway schema migrations
+* **ORM:** Spring Data JPA / Hibernate 7, Spring Data MongoDB
 * **Messaging:** Apache Kafka for event-driven transactional outbox publishing
-* **Testing:** JUnit 5, AssertJ, Mockito, Testcontainers (PostgreSQL 18, Kafka)
+* **Testing:** JUnit 5, AssertJ, Mockito, Testcontainers (PostgreSQL 18, Kafka 4.3.1, MongoDB 7)
 * **API Docs:** OpenAPI 3 & Swagger UI via `springdoc-openapi`
 * **Code Formatter:** `formatter-maven-plugin` (runs on `validate` and CI)
 
@@ -34,6 +34,7 @@ When running locally, each service exposes an interactive Swagger UI with JWT Be
 
 * **Identity Service UI:** [http://localhost:8081/swagger](http://localhost:8081/swagger) (OpenAPI spec: `/api-docs`)
 * **Ledger Service UI:** [http://localhost:8082/swagger](http://localhost:8082/swagger) (OpenAPI spec: `/api-docs`)
+* **Statement Service UI:** [http://localhost:8083/swagger](http://localhost:8083/swagger) (OpenAPI spec: `/api-docs`)
 
 ---
 
@@ -76,12 +77,13 @@ cp deploy/.env.example deploy/.env
 ```
 
 ### 3. Start Infrastructure Containers
-Start PostgreSQL databases and Kafka event broker:
+Start PostgreSQL databases, MongoDB, and Kafka event broker:
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
 ```
 * `identity_db`: mapped to host port **5433** (container 5432)
 * `ledger_db`: mapped to host port **5436** (container 5432)
+* `statement-db`: mapped to host port **27018** (container 27017)
 * `kafka`: broker mapped to host port **9093** (internal 9092)
 
 ### 4. Build and Verify
@@ -110,6 +112,12 @@ Each microservice runs independently with its own database and port:
 * **Ledger Service** (Port `8082`, DB Port `5436`):
   ```bash
   cd ledger-service
+  ../mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+  ```
+
+* **Statement Service** (Port `8083`, DB Port `27018`):
+  ```bash
+  cd statement-service
   ../mvnw spring-boot:run -Dspring-boot.run.profiles=dev
   ```
 
