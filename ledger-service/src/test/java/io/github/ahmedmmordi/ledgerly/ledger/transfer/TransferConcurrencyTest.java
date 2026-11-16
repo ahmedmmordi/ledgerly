@@ -46,6 +46,8 @@ class TransferConcurrencyTest {
         registry.add("DB_PASSWORD", postgres::getPassword);
         registry.add("DB_POOL_MAX", () -> 30);
         registry.add("DB_POOL_MIN", () -> 5);
+        registry.add("spring.kafka.admin.auto-create", () -> "false");
+        registry.add("ledger.outbox.poller.enabled", () -> "false");
     }
 
     @Autowired

@@ -39,6 +39,8 @@ class IdempotencyKeyRepositoryTest {
         registry.add("DB_URL", postgres::getJdbcUrl);
         registry.add("DB_USERNAME", postgres::getUsername);
         registry.add("DB_PASSWORD", postgres::getPassword);
+        registry.add("spring.kafka.admin.auto-create", () -> "false");
+        registry.add("ledger.outbox.poller.enabled", () -> "false");
     }
 
     @Autowired

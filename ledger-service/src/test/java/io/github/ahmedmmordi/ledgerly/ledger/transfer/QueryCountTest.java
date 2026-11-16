@@ -46,6 +46,7 @@ class QueryCountTest {
         registry.add("DB_URL", postgres::getJdbcUrl);
         registry.add("DB_USERNAME", postgres::getUsername);
         registry.add("DB_PASSWORD", postgres::getPassword);
+        registry.add("spring.kafka.admin.auto-create", () -> "false");
         registry.add("ledger.outbox.poller.enabled", () -> "false");
     }
 
@@ -135,7 +136,7 @@ class QueryCountTest {
         statistics.clear();
 
         PageResponse<TransferResponse> response = restClient.get()
-                .uri("/api/v1/transfers?accountId=" + fromAccountId + "&page=0&size=20")
+                .uri("/api/v1/transfers?accountId=" + fromAccountId + "&page=0&size=5")
                 .accept(MediaType.APPLICATION_JSON).exchange((_, res) -> {
                     assertThat(res.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
                     return res.bodyTo(new ParameterizedTypeReference<>() {
@@ -143,7 +144,7 @@ class QueryCountTest {
                 });
 
         assertThat(response).isNotNull();
-        assertThat(response.content()).hasSize(11);
+        assertThat(response.content()).hasSize(5);
         assertThat(response.totalElements()).isEqualTo(11);
 
         assertThat(statistics.getPrepareStatementCount())
@@ -156,7 +157,7 @@ class QueryCountTest {
         statistics.clear();
 
         PageResponse<TransferResponse> response = restClient.get()
-                .uri("/api/v1/transfers?userId=" + userId + "&page=0&size=20").accept(MediaType.APPLICATION_JSON)
+                .uri("/api/v1/transfers?userId=" + userId + "&page=0&size=5").accept(MediaType.APPLICATION_JSON)
                 .exchange((_, res) -> {
                     assertThat(res.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
                     return res.bodyTo(new ParameterizedTypeReference<>() {
@@ -164,7 +165,7 @@ class QueryCountTest {
                 });
 
         assertThat(response).isNotNull();
-        assertThat(response.content()).hasSize(11);
+        assertThat(response.content()).hasSize(5);
         assertThat(response.totalElements()).isEqualTo(11);
 
         assertThat(statistics.getPrepareStatementCount())
@@ -214,15 +215,15 @@ class QueryCountTest {
         statistics.clear();
 
         PageResponse<TransferResponse> response = restClient.get()
-                .uri("/api/v1/transfers?accountId=" + toAccountId + "&page=0&size=20")
-                .accept(MediaType.APPLICATION_JSON).exchange((_, res) -> {
+                .uri("/api/v1/transfers?accountId=" + toAccountId + "&page=0&size=5").accept(MediaType.APPLICATION_JSON)
+                .exchange((_, res) -> {
                     assertThat(res.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
                     return res.bodyTo(new ParameterizedTypeReference<>() {
                     });
                 });
 
         assertThat(response).isNotNull();
-        assertThat(response.content()).hasSize(10);
+        assertThat(response.content()).hasSize(5);
         assertThat(response.totalElements()).isEqualTo(10);
 
         assertThat(statistics.getPrepareStatementCount())
