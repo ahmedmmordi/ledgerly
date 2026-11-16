@@ -21,7 +21,8 @@ Ledgerly is a mini core banking backend built with a **microservices architectur
 * **Framework:** Spring Boot 4 (Multi-module Maven)
 * **Databases:** PostgreSQL 18 (Alpine) per microservice, Flyway schema migrations
 * **ORM:** Spring Data JPA / Hibernate 7
-* **Testing:** JUnit 5, AssertJ, Mockito, Testcontainers 2 (PostgreSQL 18)
+* **Messaging:** Apache Kafka for event-driven transactional outbox publishing
+* **Testing:** JUnit 5, AssertJ, Mockito, Testcontainers (PostgreSQL 18, Kafka)
 * **API Docs:** OpenAPI 3 & Swagger UI via `springdoc-openapi`
 * **Code Formatter:** `formatter-maven-plugin` (runs on `validate` and CI)
 
@@ -74,13 +75,14 @@ All pre-seeded users use password **`Password123!`**:
 cp deploy/.env.example deploy/.env
 ```
 
-### 3. Start PostgreSQL Databases
-Start the isolated PostgreSQL 18 databases for each service:
+### 3. Start Infrastructure Containers
+Start PostgreSQL databases and Kafka event broker:
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
 ```
 * `identity_db`: mapped to host port **5433** (container 5432)
 * `ledger_db`: mapped to host port **5436** (container 5432)
+* `kafka`: broker mapped to host port **9093** (internal 9092)
 
 ### 4. Build and Verify
 Run formatting, compilation, and tests across all modules:
@@ -113,7 +115,7 @@ Each microservice runs independently with its own database and port:
 
 Both services can run concurrently in separate terminal sessions.
 
-### 6. Stop Databases
+### 6. Stop Infrastructure Containers
 ```bash
 docker compose -f deploy/docker-compose.yml down
 ```
