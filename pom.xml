@@ -31,6 +31,7 @@
         <module>common-lib</module>
         <module>identity-service</module>
         <module>ledger-service</module>
+        <module>statement-service</module>
     </modules>
 
     <properties>

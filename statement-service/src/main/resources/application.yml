@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: statement-service
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27018/statement_db}
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: 8083
+  shutdown: graceful
+
+springdoc:
+  swagger-ui:
+    operations-sorter: method
+    tags-sorter: alpha
+    path: /swagger
+  api-docs:
+    path: /api-docs
