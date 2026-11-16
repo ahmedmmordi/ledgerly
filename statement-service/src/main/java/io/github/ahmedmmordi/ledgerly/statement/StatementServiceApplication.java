@@ -3,8 +3,10 @@ package io.github.ahmedmmordi.ledgerly.statement;
 import org.jspecify.annotations.NullMarked;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.data.mongodb.config.EnableMongoAuditing;
 
 @NullMarked
+@EnableMongoAuditing
 @SpringBootApplication
 public class StatementServiceApplication {
 

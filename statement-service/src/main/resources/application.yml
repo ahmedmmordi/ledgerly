@@ -1,9 +1,14 @@
 spring:
   application:
     name: statement-service
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27018/statement_db}
+    database: ${MONGODB_DATABASE:statement_db}
+    representation:
+      uuid: standard
   data:
     mongodb:
-      uri: ${MONGODB_URI:mongodb://localhost:27018/statement_db}
+      auto-index-creation: true
   threads:
     virtual:
       enabled: true

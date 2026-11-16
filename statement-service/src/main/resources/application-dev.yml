@@ -1,4 +1,4 @@
 spring:
-  data:
-    mongodb:
-      uri: mongodb://localhost:27018/statement_db
+  mongodb:
+    uri: mongodb://localhost:27018/statement_db
+    database: statement_db
