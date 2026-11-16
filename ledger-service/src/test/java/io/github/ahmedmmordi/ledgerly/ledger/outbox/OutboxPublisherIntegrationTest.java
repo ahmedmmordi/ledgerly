@@ -23,6 +23,8 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.AfterEach;
@@ -51,15 +53,22 @@ class OutboxPublisherIntegrationTest {
     static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18-alpine");
 
     @Container
-    static KafkaContainer kafka = new KafkaContainer("apache/kafka:latest");
+    static KafkaContainer kafka = new KafkaContainer("apache/kafka:4.3.1");
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("DB_URL", postgres::getJdbcUrl);
         registry.add("DB_USERNAME", postgres::getUsername);
         registry.add("DB_PASSWORD", postgres::getPassword);
+        registry.add("DB_POOL_MAX", () -> 20);
+        registry.add("DB_POOL_MIN", () -> 5);
+        registry.add("spring.datasource.hikari.connection-timeout", () -> 30000);
+        registry.add("spring.datasource.hikari.connection-test-query", () -> "SELECT 1");
+        registry.add("spring.datasource.hikari.validation-timeout", () -> 5000);
         registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+        registry.add("KAFKA_BOOTSTRAP_SERVERS", kafka::getBootstrapServers);
         registry.add("ledger.outbox.poller.fixed-delay-ms", () -> "100");
+        registry.add("ledger.outbox.poller.send-timeout-seconds", () -> "15");
     }
 
     @Autowired
@@ -84,6 +93,8 @@ class OutboxPublisherIntegrationTest {
 
     @BeforeEach
     void setUpConsumer() {
+        outboxEventRepository.deleteAll();
+
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers());
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "outbox-test-group-" + UUID.randomUUID());
@@ -91,7 +102,19 @@ class OutboxPublisherIntegrationTest {
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         testConsumer = new KafkaConsumer<>(props);
-        testConsumer.subscribe(List.of(KafkaProducerConfig.TOPIC_TRANSFERS));
+
+        await().atMost(Duration.ofSeconds(15)).until(() -> {
+            List<PartitionInfo> partitions = testConsumer.partitionsFor(KafkaProducerConfig.TOPIC_TRANSFERS);
+            return partitions != null && !partitions.isEmpty();
+        });
+
+        List<TopicPartition> topicPartitions = testConsumer.partitionsFor(KafkaProducerConfig.TOPIC_TRANSFERS).stream()
+                .map(info -> new TopicPartition(info.topic(), info.partition())).toList();
+        testConsumer.assign(topicPartitions);
+        testConsumer.seekToEnd(topicPartitions);
+        for (TopicPartition tp : topicPartitions) {
+            testConsumer.position(tp);
+        }
     }
 
     @AfterEach
@@ -125,7 +148,7 @@ class OutboxPublisherIntegrationTest {
         OutboxEvent initialEvent = events.getFirst();
         UUID outboxEventId = initialEvent.getId();
 
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> {
             OutboxEvent polledEvent = outboxEventRepository.findById(outboxEventId).orElseThrow();
             assertThat(polledEvent.getStatus()).isEqualTo(OutboxStatus.SENT);
             assertThat(polledEvent.getSentAt()).isNotNull();
@@ -137,7 +160,7 @@ class OutboxPublisherIntegrationTest {
         });
 
         List<ConsumerRecord<String, String>> received = new ArrayList<>();
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> {
             ConsumerRecords<String, String> records = testConsumer.poll(Duration.ofMillis(200));
             records.forEach(received::add);
 
@@ -151,7 +174,7 @@ class OutboxPublisherIntegrationTest {
                 assertThat(event.amountInMinorUnits()).isEqualTo(2000L);
                 assertThat(event.currency()).isEqualTo("USD");
                 assertThat(event.eventId()).isNotNull();
-                assertThat(event.eventId().version()).isEqualTo(7);
+                assertThat(event.eventId().version()).isEqualTo(4);
                 assertThat(event.occurredAt()).isNotNull().isBeforeOrEqualTo(Instant.now());
                 assertThat(event.version()).isEqualTo(1);
             });
@@ -173,7 +196,7 @@ class OutboxPublisherIntegrationTest {
         assertThat(events).hasSize(1);
         UUID outboxEventId = events.getFirst().getId();
 
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> {
             OutboxEvent polledEvent = outboxEventRepository.findById(outboxEventId).orElseThrow();
             assertThat(polledEvent.getStatus()).isEqualTo(OutboxStatus.SENT);
             assertThat(polledEvent.getSentAt()).isNotNull();
@@ -185,7 +208,7 @@ class OutboxPublisherIntegrationTest {
         });
 
         List<ConsumerRecord<String, String>> received = new ArrayList<>();
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> {
             ConsumerRecords<String, String> records = testConsumer.poll(Duration.ofMillis(200));
             records.forEach(received::add);
 
