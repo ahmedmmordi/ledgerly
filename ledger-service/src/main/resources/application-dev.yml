@@ -5,6 +5,9 @@ spring:
     password: postgres
   jpa:
     show-sql: false
+    properties:
+      hibernate:
+        default_batch_fetch_size: 20
   kafka:
     bootstrap-servers: localhost:9093
     admin:
@@ -13,6 +16,9 @@ spring:
 ledger:
   idempotency:
     ttl: 24h
+  kafka:
+    topics:
+      transfers: ledger.transfers.v1
   outbox:
     poller:
       enabled: true
