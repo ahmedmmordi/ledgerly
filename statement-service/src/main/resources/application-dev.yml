@@ -2,3 +2,5 @@ spring:
   mongodb:
     uri: mongodb://localhost:27018/statement_db
     database: statement_db
+  kafka:
+    bootstrap-servers: localhost:9093

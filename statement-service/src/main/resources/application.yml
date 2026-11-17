@@ -12,6 +12,8 @@ spring:
   threads:
     virtual:
       enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9093}
 
 server:
   port: 8083
@@ -24,3 +26,11 @@ springdoc:
     path: /swagger
   api-docs:
     path: /api-docs
+
+statement:
+  kafka:
+    topics:
+      transfers: ${KAFKA_TOPIC_TRANSFERS:ledger.transfers.v1}
+      transfers-dlt: ${KAFKA_TOPIC_TRANSFERS_DLT:ledger.transfers.v1.DLT}
+    consumer:
+      group-id: ${KAFKA_STATEMENT_CONSUMER_GROUP:statement-service}
