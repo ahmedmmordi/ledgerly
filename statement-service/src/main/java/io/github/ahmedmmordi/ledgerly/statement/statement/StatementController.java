@@ -50,6 +50,10 @@ public class StatementController {
             @Parameter(description = "Account ID") @PathVariable UUID accountId,
             @Parameter(description = "Start month in YYYY-MM format", example = "2026-01") @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth from,
             @Parameter(description = "End month in YYYY-MM format", example = "2026-12") @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth to) {
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("From date (%s) must not be after to date (%s)".formatted(from, to));
+        }
+
         ContentDisposition contentDisposition = ContentDisposition.attachment()
                 .filename("statements.csv", StandardCharsets.UTF_8).build();
 
