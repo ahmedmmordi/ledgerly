@@ -11,7 +11,7 @@ Ledgerly is a mini core banking backend built with a **microservices architectur
 | **api-gateway** | Routing, JWT validation, Redis rate limiting | Redis | 8080 | Planned |
 | **identity-service** | User registration, authentication, JWT issuing | PostgreSQL (Port 5433) | 8081 | Active |
 | **ledger-service** | Accounts, double-entry ledger, atomic transfers, outbox | PostgreSQL (Port 5436) | 8082 | Active |
-| **statement-service** | Kafka event consumer, monthly statements, CSV exports | MongoDB (Port 27018) | 8083 | In Progress |
+| **statement-service** | Kafka event consumer, monthly statements, CSV exports | MongoDB (Port 27018) | 8083 | Active |
 
 ---
 
@@ -121,7 +121,7 @@ Each microservice runs independently with its own database and port:
   ../mvnw spring-boot:run -Dspring-boot.run.profiles=dev
   ```
 
-Both services can run concurrently in separate terminal sessions.
+All three services can run concurrently in separate terminal sessions.
 
 ### 6. Stop Infrastructure Containers
 ```bash
