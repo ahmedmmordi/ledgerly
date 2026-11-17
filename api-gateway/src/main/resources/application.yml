@@ -1,0 +1,47 @@
+server:
+  port: ${GATEWAY_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: api-gateway
+  threads:
+    virtual:
+      enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:5000}
+            response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:10s}
+          routes:
+            - id: auth-route
+              uri: ${IDENTITY_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/auth/**, /auth/**
+            - id: users-route
+              uri: ${IDENTITY_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/users/**, /users/**
+            - id: statements-route
+              uri: ${STATEMENT_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/accounts/*/statements, /api/v1/accounts/*/statements/**, /api/v1/accounts/*/statements.csv
+            - id: accounts-route
+              uri: ${LEDGER_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/v1/accounts/**
+            - id: transfers-route
+              uri: ${LEDGER_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/v1/transfers/**
+
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:${GATEWAY_JWT_SECRET:ZGV2LW9ubHktc2VjcmV0LWtleS0zMi1ieXRlcy1taW4h}}
