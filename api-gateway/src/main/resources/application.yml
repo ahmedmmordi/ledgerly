@@ -19,6 +19,11 @@ spring:
           httpclient:
             connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:5000}
             response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:10s}
+          default-filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
           routes:
             - id: auth-route
               uri: ${IDENTITY_SERVICE_URL:http://localhost:8081}
@@ -45,3 +50,6 @@ app:
   security:
     jwt:
       secret: ${JWT_SECRET:${GATEWAY_JWT_SECRET:ZGV2LW9ubHktc2VjcmV0LWtleS0zMi1ieXRlcy1taW4h}}
+  rate-limiting:
+    replenish-rate: ${RATE_LIMIT_REPLENISH_RATE:10}
+    burst-capacity: ${RATE_LIMIT_BURST_CAPACITY:20}

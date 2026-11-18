@@ -8,3 +8,6 @@ app:
   security:
     jwt:
       secret: "ZGV2LW9ubHktc2VjcmV0LWtleS0zMi1ieXRlcy1taW4h"
+  rate-limiting:
+    replenish-rate: 10
+    burst-capacity: 20
