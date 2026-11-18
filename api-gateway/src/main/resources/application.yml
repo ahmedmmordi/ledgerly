@@ -57,3 +57,17 @@ app:
 logging:
   pattern:
     level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
