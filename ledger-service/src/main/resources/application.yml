@@ -40,6 +40,8 @@ springdoc:
     path: /api-docs
 
 logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
   level:
     org.apache.kafka: WARN
 

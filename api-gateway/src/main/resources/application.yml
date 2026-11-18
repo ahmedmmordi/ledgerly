@@ -53,3 +53,7 @@ app:
   rate-limiting:
     replenish-rate: ${RATE_LIMIT_REPLENISH_RATE:10}
     burst-capacity: ${RATE_LIMIT_BURST_CAPACITY:20}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"

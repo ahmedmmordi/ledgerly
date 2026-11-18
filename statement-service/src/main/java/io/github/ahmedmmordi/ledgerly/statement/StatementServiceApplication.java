@@ -7,7 +7,8 @@ import org.springframework.data.mongodb.config.EnableMongoAuditing;
 
 @NullMarked
 @EnableMongoAuditing
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = { "io.github.ahmedmmordi.ledgerly.statement",
+        "io.github.ahmedmmordi.ledgerly.common.filter" })
 public class StatementServiceApplication {
 
     public static void main(String[] args) {

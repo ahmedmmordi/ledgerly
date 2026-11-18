@@ -39,3 +39,7 @@ springdoc:
     path: /swagger
   api-docs:
     path: /api-docs
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
