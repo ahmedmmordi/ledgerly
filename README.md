@@ -8,7 +8,7 @@ Ledgerly is a mini core banking backend built with a **microservices architectur
 
 | Service | Responsibility | Storage | Port | Status |
 |---|---|---|---|---|
-| **api-gateway** | Routing, JWT validation, Redis rate limiting | Redis | 8080 | Planned |
+| **api-gateway** | Routing, JWT validation, Redis rate limiting | Redis | 8080 | Active |
 | **identity-service** | User registration, authentication, JWT issuing | PostgreSQL (Port 5433) | 8081 | Active |
 | **ledger-service** | Accounts, double-entry ledger, atomic transfers, outbox | PostgreSQL (Port 5436) | 8082 | Active |
 | **statement-service** | Kafka event consumer, monthly statements, CSV exports | MongoDB (Port 27018) | 8083 | Active |
@@ -19,9 +19,10 @@ Ledgerly is a mini core banking backend built with a **microservices architectur
 
 * **Runtime:** Java 25 (Virtual Threads enabled via `spring.threads.virtual.enabled=true`)
 * **Framework:** Spring Boot 4 (Multi-module Maven)
-* **Databases:** PostgreSQL 18 (Alpine) per relational microservice, MongoDB 7 (statement-service), Flyway schema migrations
-* **ORM:** Spring Data JPA / Hibernate 7, Spring Data MongoDB
+* **Databases & Cache:** PostgreSQL 18 (Alpine) per relational microservice, MongoDB 7 (statement-service), Redis 7 (api-gateway rate limiting), Flyway schema migrations
+* **ORM & Data Access:** Spring Data JPA / Hibernate 7, Spring Data MongoDB, Spring Data Redis Reactive
 * **Messaging:** Apache Kafka for event-driven transactional outbox publishing
+* **API Gateway:** Spring Cloud Gateway 5 (WebFlux) with JWT authentication and Redis token bucket rate limiting
 * **Testing:** JUnit 5, AssertJ, Mockito, Testcontainers (PostgreSQL 18, Kafka 4.3.1, MongoDB 7)
 * **API Docs:** OpenAPI 3 & Swagger UI via `springdoc-openapi`
 * **Code Formatter:** `formatter-maven-plugin` (runs on `validate` and CI)
@@ -77,14 +78,19 @@ cp deploy/.env.example deploy/.env
 ```
 
 ### 3. Start Infrastructure Containers
-Start PostgreSQL databases, MongoDB, and Kafka event broker:
+Start PostgreSQL databases, MongoDB, Kafka event broker, and Redis cache:
 ```bash
+# Start containers in background
 docker compose -f deploy/docker-compose.yml up -d
+
+# Verify all containers are healthy
+docker compose -f deploy/docker-compose.yml ps
 ```
 * `identity_db`: mapped to host port **5433** (container 5432)
 * `ledger_db`: mapped to host port **5436** (container 5432)
 * `statement-db`: mapped to host port **27018** (container 27017)
 * `kafka`: broker mapped to host port **9093** (internal 9092)
+* `redis`: cache and rate limiter mapped to host port **6380** (container 6379)
 
 ### 4. Build and Verify
 Run formatting, compilation, and tests across all modules:
@@ -101,7 +107,13 @@ Run formatting, compilation, and tests across all modules:
 
 ### 5. Run Microservices
 
-Each microservice runs independently with its own database and port:
+Each microservice runs independently with its own storage and port:
+
+* **API Gateway** (Port `8080`, Redis Port `6380`):
+  ```bash
+  cd api-gateway
+  ../mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+  ```
 
 * **Identity Service** (Port `8081`, DB Port `5433`):
   ```bash
@@ -121,7 +133,7 @@ Each microservice runs independently with its own database and port:
   ../mvnw spring-boot:run -Dspring-boot.run.profiles=dev
   ```
 
-All three services can run concurrently in separate terminal sessions.
+All four services can run concurrently in separate terminal sessions. Requests from clients enter via the **API Gateway** on port `8080` and are authenticated and rate-limited before routing downstream.
 
 ### 6. Stop Infrastructure Containers
 ```bash
