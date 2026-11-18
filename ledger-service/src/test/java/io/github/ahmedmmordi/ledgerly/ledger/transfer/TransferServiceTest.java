@@ -1,5 +1,9 @@
 package io.github.ahmedmmordi.ledgerly.ledger.transfer;
 
+import static io.github.ahmedmmordi.ledgerly.ledger.transfer.TransferService.METRIC_TRANSFERS_COMPLETED;
+import static io.github.ahmedmmordi.ledgerly.ledger.transfer.TransferService.METRIC_TRANSFERS_FAILED;
+import static io.github.ahmedmmordi.ledgerly.ledger.transfer.TransferService.TAG_CURRENCY;
+import static io.github.ahmedmmordi.ledgerly.ledger.transfer.TransferService.TAG_REASON;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -25,6 +29,7 @@ import io.github.ahmedmmordi.ledgerly.ledger.domain.TransferNotFoundException;
 import io.github.ahmedmmordi.ledgerly.ledger.outbox.OutboxService;
 import io.github.ahmedmmordi.ledgerly.ledger.transfer.rule.TransferContext;
 import io.github.ahmedmmordi.ledgerly.ledger.transfer.rule.TransferRule;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.Collections;
 import java.util.Currency;
 import java.util.List;
@@ -76,12 +81,14 @@ class TransferServiceTest {
     @Mock
     private OutboxService outboxService;
 
+    private SimpleMeterRegistry meterRegistry;
     private TransferService transferService;
 
     @BeforeEach
     void setUp() {
+        meterRegistry = new SimpleMeterRegistry();
         transferService = new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                accountService, List.of(mockRule1, mockRule2), outboxService);
+                accountService, List.of(mockRule1, mockRule2), outboxService, meterRegistry);
     }
 
     private Account createMockAccount(UUID id, String accountNumber, String currency, long balance, AccountType type) {
@@ -102,15 +109,15 @@ class TransferServiceTest {
         @DisplayName("Should reject null AccountRepository")
         void shouldRejectNullAccountRepository() {
             assertThatThrownBy(() -> new TransferService(null, transferRepository, ledgerEntryRepository,
-                    accountService, List.of(mockRule1), outboxService)).isInstanceOf(NullPointerException.class)
-                            .hasMessage("AccountRepository must not be null");
+                    accountService, List.of(mockRule1), outboxService, meterRegistry))
+                            .isInstanceOf(NullPointerException.class).hasMessage("AccountRepository must not be null");
         }
 
         @Test
         @DisplayName("Should reject null TransferRepository")
         void shouldRejectNullTransferRepository() {
             assertThatThrownBy(() -> new TransferService(accountRepository, null, ledgerEntryRepository, accountService,
-                    List.of(mockRule1), outboxService)).isInstanceOf(NullPointerException.class)
+                    List.of(mockRule1), outboxService, meterRegistry)).isInstanceOf(NullPointerException.class)
                             .hasMessage("TransferRepository must not be null");
         }
 
@@ -118,7 +125,7 @@ class TransferServiceTest {
         @DisplayName("Should reject null LedgerEntryRepository")
         void shouldRejectNullLedgerEntryRepository() {
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, null, accountService,
-                    List.of(mockRule1), outboxService)).isInstanceOf(NullPointerException.class)
+                    List.of(mockRule1), outboxService, meterRegistry)).isInstanceOf(NullPointerException.class)
                             .hasMessage("LedgerEntryRepository must not be null");
         }
 
@@ -126,7 +133,7 @@ class TransferServiceTest {
         @DisplayName("Should reject null AccountService")
         void shouldRejectNullAccountService() {
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    null, List.of(mockRule1), outboxService)).isInstanceOf(NullPointerException.class)
+                    null, List.of(mockRule1), outboxService, meterRegistry)).isInstanceOf(NullPointerException.class)
                             .hasMessage("AccountService must not be null");
         }
 
@@ -134,15 +141,23 @@ class TransferServiceTest {
         @DisplayName("Should reject null OutboxService")
         void shouldRejectNullOutboxService() {
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    accountService, List.of(mockRule1), null)).isInstanceOf(NullPointerException.class)
+                    accountService, List.of(mockRule1), null, meterRegistry)).isInstanceOf(NullPointerException.class)
                             .hasMessage("OutboxService must not be null");
+        }
+
+        @Test
+        @DisplayName("Should reject null MeterRegistry")
+        void shouldRejectNullMeterRegistry() {
+            assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
+                    accountService, List.of(mockRule1), outboxService, null)).isInstanceOf(NullPointerException.class)
+                            .hasMessage("MeterRegistry must not be null");
         }
 
         @Test
         @DisplayName("Should reject null rules list")
         void shouldRejectNullRulesList() {
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    accountService, null, outboxService)).isInstanceOf(NullPointerException.class)
+                    accountService, null, outboxService, meterRegistry)).isInstanceOf(NullPointerException.class)
                             .hasMessage("Transfer rules must not be null");
         }
 
@@ -151,7 +166,7 @@ class TransferServiceTest {
         void shouldRejectEmptyRulesList() {
             List<TransferRule> empty = Collections.emptyList();
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    accountService, empty, outboxService)).isInstanceOf(IllegalArgumentException.class)
+                    accountService, empty, outboxService, meterRegistry)).isInstanceOf(IllegalArgumentException.class)
                             .hasMessage("Transfer rules must not be empty");
         }
 
@@ -160,8 +175,8 @@ class TransferServiceTest {
         void shouldRejectNullRuleElement() {
             List<TransferRule> rulesWithNull = Collections.singletonList(null);
             assertThatThrownBy(() -> new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    accountService, rulesWithNull, outboxService)).isInstanceOf(NullPointerException.class)
-                            .hasMessage("Transfer rule must not be null");
+                    accountService, rulesWithNull, outboxService, meterRegistry))
+                            .isInstanceOf(NullPointerException.class).hasMessage("Transfer rule must not be null");
         }
 
         @Test
@@ -188,7 +203,7 @@ class TransferServiceTest {
             }
 
             TransferService service = new TransferService(accountRepository, transferRepository, ledgerEntryRepository,
-                    accountService, List.of(new RuleOrder20(), new RuleOrder5()), outboxService);
+                    accountService, List.of(new RuleOrder20(), new RuleOrder5()), outboxService, meterRegistry);
 
             Account sender = createMockAccount(ID_LOWER, "ACC1111111111", "USD", 10_000L, AccountType.CUSTOMER);
             Account receiver = createMockAccount(ID_HIGHER, "ACC2222222222", "USD", 5_000L, AccountType.CUSTOMER);
@@ -909,6 +924,103 @@ class TransferServiceTest {
 
             assertThatThrownBy(() -> transferService.getLedgerEntriesByAccountId(ID_LOWER, null))
                     .isInstanceOf(NullPointerException.class).hasMessage("Pageable must not be null");
+        }
+    }
+
+    @Nested
+    @DisplayName("Custom Transfer Metrics Tests")
+    class TransferMetricsTests {
+
+        @Test
+        @DisplayName("Should increment transfers.completed.total tagged with currency on successful transfer")
+        void transfer_whenSuccessful_incrementsCompletedCounterWithCurrencyTag() {
+            Account sender = createMockAccount(ID_LOWER, "ACC1111111111", "USD", 10_000L, AccountType.CUSTOMER);
+            Account receiver = createMockAccount(ID_HIGHER, "ACC2222222222", "USD", 5_000L, AccountType.CUSTOMER);
+
+            given(accountRepository.findByIdForUpdate(ID_LOWER)).willReturn(Optional.of(sender));
+            given(accountRepository.findByIdForUpdate(ID_HIGHER)).willReturn(Optional.of(receiver));
+            given(transferRepository.save(any(Transfer.class))).willAnswer(inv -> {
+                Transfer t = inv.getArgument(0);
+                ReflectionTestUtils.setField(t, "id", TRANSFER_ID);
+                return t;
+            });
+
+            transferService.transfer(ID_LOWER, ID_HIGHER, Money.ofMinor(1_000L, "USD"), "Payment", USER_ID);
+
+            var counter = meterRegistry.find(METRIC_TRANSFERS_COMPLETED).tag(TAG_CURRENCY, "USD").counter();
+            assertThat(counter).isNotNull();
+            assertThat(counter.count()).isEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("Should increment transfers.failed.total tagged with exception reason when transfer rule throws")
+        void transfer_whenRuleThrows_incrementsFailedCounterWithReasonTag() {
+            Account sender = createMockAccount(ID_LOWER, "ACC1111111111", "USD", 10_000L, AccountType.CUSTOMER);
+            Account receiver = createMockAccount(ID_HIGHER, "ACC2222222222", "USD", 5_000L, AccountType.CUSTOMER);
+
+            given(accountRepository.findByIdForUpdate(ID_LOWER)).willReturn(Optional.of(sender));
+            given(accountRepository.findByIdForUpdate(ID_HIGHER)).willReturn(Optional.of(receiver));
+            Money amount = Money.ofMinor(15_000L, "USD");
+            doThrow(new InsufficientFundsException(ID_LOWER, amount, sender.getBalance())).when(mockRule1)
+                    .validate(any(TransferContext.class));
+
+            assertThatThrownBy(() -> transferService.transfer(ID_LOWER, ID_HIGHER, amount, "Payment", USER_ID))
+                    .isInstanceOf(InsufficientFundsException.class);
+
+            var counter = meterRegistry.find(METRIC_TRANSFERS_FAILED).tag(TAG_REASON, "InsufficientFundsException")
+                    .counter();
+            assertThat(counter).isNotNull();
+            assertThat(counter.count()).isEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("Should increment transfers.failed.total tagged with AccountNotFoundException when account missing")
+        void transfer_whenAccountMissing_incrementsFailedCounterWithAccountNotFound() {
+            given(accountRepository.findByIdForUpdate(ID_LOWER)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> transferService.transfer(ID_LOWER, ID_HIGHER, Money.ofMinor(1_000L, "USD"),
+                    "Payment", USER_ID)).isInstanceOf(AccountNotFoundException.class);
+
+            var counter = meterRegistry.find(METRIC_TRANSFERS_FAILED).tag(TAG_REASON, "AccountNotFoundException")
+                    .counter();
+            assertThat(counter).isNotNull();
+            assertThat(counter.count()).isEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("Should increment transfers.failed.total tagged with IllegalArgumentException when accounts identical")
+        void transfer_whenAccountsIdentical_incrementsFailedCounterWithIllegalArgument() {
+            assertThatThrownBy(() -> transferService.transfer(ID_LOWER, ID_LOWER, Money.ofMinor(1_000L, "USD"),
+                    "Payment", USER_ID)).isInstanceOf(IllegalArgumentException.class);
+
+            var counter = meterRegistry.find(METRIC_TRANSFERS_FAILED).tag(TAG_REASON, "IllegalArgumentException")
+                    .counter();
+            assertThat(counter).isNotNull();
+            assertThat(counter.count()).isEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("Should increment transfers.completed.total when deposit succeeds")
+        void deposit_whenSuccessful_incrementsCompletedCounter() {
+            UUID systemId = UUID.fromString("0193297a-9a90-7888-8123-000000000001");
+            Account systemAccount = createMockAccount(systemId, "SYSUSD00000001", "USD", 0L, AccountType.SYSTEM);
+            Account customerAccount = createMockAccount(ID_HIGHER, "ACC2222222222", "USD", 5_000L,
+                    AccountType.CUSTOMER);
+
+            given(accountService.getOrCreateSystemAccount(USER_ID, "USD")).willReturn(systemAccount);
+            given(accountRepository.findByIdForUpdate(systemId)).willReturn(Optional.of(systemAccount));
+            given(accountRepository.findByIdForUpdate(ID_HIGHER)).willReturn(Optional.of(customerAccount));
+            given(transferRepository.save(any(Transfer.class))).willAnswer(inv -> {
+                Transfer t = inv.getArgument(0);
+                ReflectionTestUtils.setField(t, "id", TRANSFER_ID);
+                return t;
+            });
+
+            transferService.deposit(ID_HIGHER, Money.ofMinor(2_500L, "USD"), "Cash Deposit", USER_ID);
+
+            var counter = meterRegistry.find(METRIC_TRANSFERS_COMPLETED).tag(TAG_CURRENCY, "USD").counter();
+            assertThat(counter).isNotNull();
+            assertThat(counter.count()).isEqualTo(1.0);
         }
     }
 }
