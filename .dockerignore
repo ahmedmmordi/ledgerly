@@ -1,0 +1,24 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Build artifacts
+target/
+**/target/
+
+# IDE & Editor files
+.idea/
+*.iml
+.vscode/
+
+# Documentation & Plans
+**/*.md
+docs/
+
+# Deployment & Infrastructure
+deploy/
+
+# System & Logs
+**/*.log
+.DS_Store
