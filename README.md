@@ -88,15 +88,18 @@ All pre-seeded users use password **`Password123!`**:
 cp deploy/.env.example deploy/.env
 ```
 
-### 3. Start Infrastructure Containers
-Start PostgreSQL databases, MongoDB, Kafka event broker, and Redis cache:
+### 3. Start the Complete Platform
+Start all the interconnected containers (the 4 Java microservices, databases, Kafka, Redis cache, Prometheus scraper, and Grafana):
 ```bash
-# Start containers in background
-docker compose -f deploy/docker-compose.yml up -d
+# Build images and start all the containers in background
+docker compose -f deploy/docker-compose.yml up -d --build
 
-# Verify all containers are healthy
+# Verify all the containers are healthy
 docker compose -f deploy/docker-compose.yml ps
 ```
+* **API Gateway**: mapped to host port **8080** (single entry point for all client traffic)
+* **Grafana Dashboard**: `http://localhost:3001/d/ledgerly` (login: `admin` / `admin`)
+* **Prometheus Targets**: `http://localhost:9091/targets` (auto-scrapes all 4 microservices)
 * `identity_db`: mapped to host port **5433** (container 5432)
 * `ledger_db`: mapped to host port **5436** (container 5432)
 * `statement-db`: mapped to host port **27018** (container 27017)
@@ -118,9 +121,9 @@ Run formatting, compilation, and tests across all modules:
 ./mvnw verify
 ```
 
-### 5. Run Microservices
+### 5. Alternative: Run Microservices Standalone
 
-Each microservice runs independently with its own storage and port:
+If developing locally without running the application containers, start only the infrastructure in Docker, then run each service independently using the `dev` profile:
 
 * **API Gateway** (Port `8080`, Redis Port `6380`):
   ```bash

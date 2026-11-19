@@ -39,7 +39,7 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093,CONTROLLER://0.0.0.0:9090
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,EXTERNAL://localhost:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9093
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9090
@@ -75,6 +75,107 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  identity-service:
+    build:
+      context: ..
+      dockerfile: identity-service/Dockerfile
+    environment:
+      - DB_URL=jdbc:postgresql://identity-db:5432/identity_db
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres
+      - JWT_SECRET=${JWT_SECRET:-ZGV2LW9ubHktc2VjcmV0LWtleS0zMi1ieXRlcy1taW4h}
+      - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS:-86400000}
+    ports:
+      - "8081:8081"
+    depends_on:
+      identity-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  ledger-service:
+    build:
+      context: ..
+      dockerfile: ledger-service/Dockerfile
+    environment:
+      - DB_URL=jdbc:postgresql://ledger-db:5432/ledger_db
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - JWT_SECRET=${JWT_SECRET:-ZGV2LW9ubHktc2VjcmV0LWtleS0zMi1ieXRlcy1taW4h}
+      - OUTBOX_POLLER_ENABLED=${OUTBOX_POLLER_ENABLED:-true}
+    ports:
+      - "8082:8082"
+    depends_on:
+      ledger-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  statement-service:
+    build:
+      context: ..
+      dockerfile: statement-service/Dockerfile
+    environment:
+      - MONGODB_URI=mongodb://statement-db:27017/statement_db
+      - MONGODB_DATABASE=statement_db
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - JWT_SECRET=${JWT_SECRET:-ZGV2LW9ubHktc2VjcmV0LWtleS0zMi1ieXRlcy1taW4h}
+    ports:
+      - "8083:8083"
+    depends_on:
+      statement-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8083/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: api-gateway/Dockerfile
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - IDENTITY_SERVICE_URL=http://identity-service:8081
+      - LEDGER_SERVICE_URL=http://ledger-service:8082
+      - STATEMENT_SERVICE_URL=http://statement-service:8083
+      - JWT_SECRET=${JWT_SECRET:-ZGV2LW9ubHktc2VjcmV0LWtleS0zMi1ieXRlcy1taW4h}
+      - RATE_LIMIT_REPLENISH_RATE=${RATE_LIMIT_REPLENISH_RATE:-10}
+      - RATE_LIMIT_BURST_CAPACITY=${RATE_LIMIT_BURST_CAPACITY:-20}
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      identity-service:
+        condition: service_healthy
+      ledger-service:
+        condition: service_healthy
+      statement-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
 
   prometheus:
     image: prom/prometheus:v3.2.1
