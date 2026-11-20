@@ -35,13 +35,16 @@ public class KafkaConsumerConfig {
     private final String bootstrapServers;
     private final String groupId;
     private final String dltTopic;
+    private final int concurrency;
 
     public KafkaConsumerConfig(@Value("${spring.kafka.bootstrap-servers:localhost:9093}") String bootstrapServers,
             @Value("${statement.kafka.consumer.group-id:statement-service}") String groupId,
-            @Value("${statement.kafka.topics.transfers-dlt:ledger.transfers.v1.DLT}") String dltTopic) {
+            @Value("${statement.kafka.topics.transfers-dlt:ledger.transfers.v1.DLT}") String dltTopic,
+            @Value("${statement.kafka.consumer.concurrency:6}") int concurrency) {
         this.bootstrapServers = bootstrapServers;
         this.groupId = groupId;
         this.dltTopic = dltTopic;
+        this.concurrency = concurrency;
     }
 
     @Bean
@@ -86,6 +89,7 @@ public class KafkaConsumerConfig {
 
         ConcurrentKafkaListenerContainerFactory<String, TransferCompletedEvent> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
+        factory.setConcurrency(concurrency);
         factory.getContainerProperties().setAckMode(AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(errorHandler);
 

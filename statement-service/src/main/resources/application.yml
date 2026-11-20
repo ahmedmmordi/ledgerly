@@ -55,3 +55,4 @@ statement:
       transfers-dlt: ${KAFKA_TOPIC_TRANSFERS_DLT:ledger.transfers.v1.DLT}
     consumer:
       group-id: ${KAFKA_STATEMENT_CONSUMER_GROUP:statement-service}
+      concurrency: ${KAFKA_CONSUMER_CONCURRENCY:6}
