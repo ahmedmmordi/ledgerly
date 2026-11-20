@@ -7,7 +7,7 @@ spring:
     password: ${DB_PASSWORD}
     hikari:
       pool-name: LedgerService-HikariCP
-      maximum-pool-size: ${DB_POOL_MAX:10}
+      maximum-pool-size: ${DB_POOL_MAX:30}
       minimum-idle: ${DB_POOL_MIN:2}
   jpa:
     hibernate:
