@@ -471,8 +471,8 @@
     ]
   },
   "timezone": "browser",
-  "title": "Ledgerly Banking Platform",
-  "uid": "ledgerly",
+  "title": "Overview",
+  "uid": "ledgerly-platform",
   "version": 1,
   "weekStart": ""
 }
