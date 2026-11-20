@@ -135,6 +135,7 @@ services:
       - MONGODB_DATABASE=statement_db
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - JWT_SECRET=${JWT_SECRET:-ZGV2LW9ubHktc2VjcmV0LWtleS0zMi1ieXRlcy1taW4h}
+      - KAFKA_CONSUMER_CONCURRENCY=${KAFKA_CONSUMER_CONCURRENCY:-6}
     ports:
       - "8083:8083"
     depends_on:
